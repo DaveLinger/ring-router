@@ -22,7 +22,9 @@ model. Answers and confirmations come back as **Pushcut** notifications.
 
 - Common commands ("tell Terri I'm on my way") run with **no cloud LLM** in the path: fast, cheap, predictable.
 - Anything that doesn't match a prefix goes to a **general agent** with the macOS tools.
-- Messages only go to **allowlisted** people and chats; nothing risky happens without a confirmation.
+- Messages only go to **allowlisted** people and chats; a near-miss name needs a confirmation.
+- **Push-to-talk means intent:** the ring only listens while the button is held, so commands run as
+  spoken, including unlock and garage-open. Confirm-first is opt-in per action (`[home] confirm_actions`).
 - Both home automation paths, **Hubitat** and **HomeKit**, can be tested side by side.
 
 **Not in scope:** email (the macos-mcp mail tools are left out; Gmail if ever needed), and anything

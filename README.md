@@ -44,7 +44,13 @@ flowchart LR
 2. **ring-router** verifies the request (secret path, signature, timestamp, de-duplication).
 3. **The router** checks, in order: a cancel phrase → an exact scene → a fixed prefix → a refusal →
    a question → the general agent. Fixed prefixes never touch a cloud LLM.
-4. **The handler** acts, and **Pushcut** tells you what happened, or asks before anything risky.
+4. **The handler** acts, and **Pushcut** tells you what happened. It only asks first when a
+   recipient name is a near-miss, or for actions you've chosen to confirm.
+
+> **Push-to-talk means intent.** The ring only listens while you hold the button, so what you say
+> runs, including "unlock the front door" and "open the garage". Confirmations are opt-in per
+> action (`[home] confirm_actions`). The one built-in check is about *who*, not *what*: messages
+> only go to allowlisted recipients.
 
 Apple's **on-device model** (`/usr/bin/fm`) handles the small language jobs for free and offline:
 turning *"ask Terri when she'll be home"* into *"When will you be home?"*, titling notes, splitting
