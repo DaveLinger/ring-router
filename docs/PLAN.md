@@ -364,7 +364,7 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 - [ ] Device list and spoken names.
 - [x] OpenRouter model IDs: `gpt-6.1-terra`, `claude-sonnet-5.5`, `deepseek-v4.1-flash`, `qwen3.8-flash`; agent on `claude-sonnet-5.5`.
 - [ ] How long the Pebble app waits for a response.
-- [ ] Pushcut action-button payload format on your plan.
+- [x] Pushcut: the notification's webhook URL accepts per-send title, text and action buttons (link and background-URL); confirmed on the phone.
 
 | Risk | Mitigation |
 | --- | --- |

@@ -182,7 +182,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
 | Ring simulator, phrase answer key, 164 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
-| Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
+| Pushcut notifications and buttons | ✅ Delivered to the phone, buttons included; confirm buttons reach the listener once the tunnel is up |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
 | Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
 | General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
