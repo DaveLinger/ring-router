@@ -11,7 +11,7 @@ a light switch, or a question to the AI model of your choice.
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Core](https://img.shields.io/badge/core-stdlib%20only-success)
 ![Platform](https://img.shields.io/badge/platform-macOS%2027-000000?logo=apple&logoColor=white)
-![Status](https://img.shields.io/badge/status-dry%20run-orange)
+![Status](https://img.shields.io/badge/status-live%20(test%20recipients)-yellow)
 
 [How it works](#how-it-works) · [What you can say](#what-you-can-say) · [Quick start](#quick-start) ·
 [Testing](#testing-without-a-ring) · [Status](#status) · [**Build plan →**](docs/PLAN.md)
@@ -200,11 +200,11 @@ phrases as you think of them; the tests fail until the router agrees.
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
 | Ring simulator, phrase answer key, 164 tests | ✅ Done |
-| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Permissions granted and verified (`ring-router check-permissions`); routes still in dry run |
+| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live: text, note, shopping item, reminder and event created end to end through the tunnel |
 | Pushcut notifications and buttons | ✅ Delivered; Send/Cancel and Full answer verified through the tunnel |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
 | Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
-| General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
+| General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Live: read the real calendar, then moved an event as a follow-up |
 | Home, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
 | Tailscale Funnel tunnel, launchd service | ✅ Running; buttons and answer pages work from the phone |
 

@@ -261,6 +261,22 @@ EVENT_SCHEMA = {"title": "Event", "type": "object", "additionalProperties": Fals
                                "all_day": {"type": "boolean"}}}
 
 
+def default_end(start: str, all_day: bool, minutes: int = 60) -> str:
+    """End time for an event with none given: start + `minutes`, or the same day if all-day."""
+    from datetime import datetime, timedelta  # noqa: PLC0415
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(start.strip(), fmt)
+            break
+        except ValueError:
+            continue
+    else:
+        return ""
+    if all_day or fmt == "%Y-%m-%d":
+        return dt.strftime("%Y-%m-%d")
+    return (dt + timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def h_calendar(r: Route, ctx: Context) -> Result:
     cal = r.params.get("calendar")
     try:
@@ -269,6 +285,9 @@ def h_calendar(r: Route, ctx: Context) -> Result:
         msg = f"Couldn't work out the event time: {e}"
         ctx.notify("Not done", msg)
         return Result("failed", msg)
+    if not (data.get("end") or "").strip():   # mcp-macos requires an end time
+        data["end"] = default_end(data.get("start", ""), bool(data.get("all_day")),
+                                  int(ctx.cfg.section("calendars").get("default_minutes", 60)))
     desc = f"“{data.get('title')}” {data.get('start')}" + (f" to {data['end']}" if data.get("end") else "")
     if ctx.dry("calendar") or not cal or cal == "CHANGE-ME":
         ctx.notify("Dry run", f"Would add {desc} to {cal}")
