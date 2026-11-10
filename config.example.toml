@@ -75,7 +75,7 @@ followup_window_s = 600      # a question to the same model within 10 min contin
 
 [agents]
 # Pydantic AI agents for unmatched commands. Needs a model that's good at tool calls.
-model = "anthropic/claude-haiku-5.5"
+model = "anthropic/claude-sonnet-5.5"
 questions_read_messages = false   # let the questions agent read Messages (needs Full Disk Access)
 
 [research]

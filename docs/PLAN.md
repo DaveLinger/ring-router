@@ -218,7 +218,7 @@ needed it replies with the command to say.
 Tools not in the table are invisible to the agent. Each mcp-macos tool takes an `action` argument,
 so a guard checks the action on every call and refuses anything not allowed. In dry run, the general
 agent's writes return "DRY RUN: would…" instead of running. Every call is logged with its result.
-Default model: `anthropic/claude-haiku-5.5` (`[agents] model`).
+Default model: `anthropic/claude-sonnet-5.5` (`[agents] model`), about 2–5¢ per request; agents pick and fill in tool calls themselves, so a strong model is worth it.
 
 **General agent and Instinct:** the general agent makes calendar changes itself with macos-mcp. It
 can't message anyone. If it can't finish a request (e.g. it needs someone else's availability) it says

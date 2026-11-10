@@ -112,7 +112,7 @@ def default_model(cfg):
     key = cfg.secret("openrouter_api_key")
     if not key:
         raise RuntimeError("OpenRouter API key not set (RING_ROUTER_OPENROUTER_API_KEY in .env)")
-    model_id = cfg.section("agents").get("model", "anthropic/claude-haiku-5.5")
+    model_id = cfg.section("agents").get("model", "anthropic/claude-sonnet-5.5")
     return OpenRouterModel(model_id, provider=OpenRouterProvider(api_key=key, app_title="ring-router"))
 
 
