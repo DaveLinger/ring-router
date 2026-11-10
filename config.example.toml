@@ -1,0 +1,132 @@
+# ring-router configuration. Copy to config.toml (git-ignored) and edit.
+# Secrets (path token, signing secret, API keys) are NOT stored here: they live in
+# the git-ignored .env file (mode 600). See `ring-router init` and .env.example.
+
+[server]
+host = "127.0.0.1"          # never bind publicly; the tunnel forwards to this
+port = 8642
+dry_run = true              # global: nothing is sent or changed while true
+dry_run_routes = []         # routes kept in dry run even when dry_run = false
+state_dir = "~/Library/Application Support/ring-router"
+timestamp_window_s = 300
+
+[notify]
+provider = "console"        # "console" (log only) or "pushcut"
+pushcut_notification = "Ring Router"   # name of the Pushcut notification to trigger
+
+[fm]
+path = "/usr/bin/fm"
+timeout_s = 15
+
+[macos_mcp]
+# Command that starts the mcp-macos server over stdio.
+command = ["npx", "-y", "mcp-macos@4.1.0"]
+
+# ---------------------------------------------------------------- recipients --
+# The allowlist. Nobody else can be messaged.
+# sounds_like: spellings speech-to-text may produce (matched as strong).
+# bare = true allows "Instinct, ..." with no ask/tell verb in front.
+
+[recipients.terri]
+display = "Terri"
+contact = "Terri Lastname"           # Contacts card name
+sounds_like = ["terri", "terry", "teri", "tari", "tery", "terrie"]
+
+[recipients.instinct]
+display = "Instinct"
+contact = "Instinct"
+sounds_like = ["instinct", "in stinct", "instink"]
+bare = true
+
+[recipients.the_guys]
+display = "the guys"
+chat_id = "any;+;chat000000000000000000"   # Messages chat ID of the group
+sounds_like = ["the guys"]
+
+# -------------------------------------------------------------------- models --
+# Spoken names -> OpenRouter model IDs. Fill in the exact model IDs.
+
+[models.chatgpt]
+display = "ChatGPT"
+spoken = ["chatgpt", "chat gpt", "chat g p t", "chat"]
+model = "openai/CHANGE-ME"
+
+[models.claude]
+display = "Claude"
+spoken = ["claude", "clod", "cloud"]
+model = "anthropic/CHANGE-ME"
+
+[models.deepseek]
+display = "DeepSeek"
+spoken = ["deepseek", "deep seek"]
+model = "deepseek/CHANGE-ME"
+
+[models.qwen]
+display = "Qwen"
+spoken = ["qwen", "quen", "kwen", "queen"]
+model = "qwen/CHANGE-ME"
+
+[research]
+default_model = "chatgpt"
+notes_folder = "Research"
+
+# --------------------------------------------------------------------- hosts --
+# Claude Code targets. ssh = "" means run locally.
+
+[hosts.mac_mini]
+display = "Mac mini"
+spoken = ["mac mini", "the mac mini", "the mac", "local"]
+ssh = ""
+workdir = "~"
+default = true
+
+[hosts.racknerd]
+display = "RackNerd VPS"
+spoken = ["racknerd vps", "rack nerd vps", "racknerd", "rack nerd", "the vps", "vps"]
+ssh = "racknerd"
+workdir = "~"
+
+# --------------------------------------------------------------------- lists --
+
+[lists.shopping]
+reminders_list = "Shopping list"
+spoken = ["shopping list", "grocery list", "groceries list", "shopping"]
+
+# ----------------------------------------------------------------- calendars --
+
+[calendars]
+default = "CHANGE-ME"        # what "my calendar" means
+# aliases: spoken name -> Calendar name
+aliases = { }
+
+# -------------------------------------------------------------------- notes --
+
+[notes]
+default_folder = "Notes"
+remember_folder = "Remember"
+
+# -------------------------------------------------------------------- scenes --
+# Exact phrase only: the whole transcript must equal one of the phrases.
+
+[scenes.goodnight]
+phrases = ["goodnight", "good night"]
+actions = []   # e.g. [{ device = "living room light", action = "off" }]
+
+[scenes.leaving]
+phrases = ["i'm leaving", "im leaving", "leaving now"]
+actions = []
+
+# -------------------------------------------------------------------- cancel --
+
+[cancel]
+strong = ["cancel cancel", "cancel that", "scrap that", "never mind", "nevermind",
+          "ignore me", "ignore that", "abort", "abort abort", "disregard that"]
+weak = ["forget that", "forget it", "don't do that", "do not do that", "stop", "cancel"]
+
+# ------------------------------------------------------------------- refusals --
+
+[refuse.timers]
+patterns = ['\bset (a|an|the)? ?(timer|alarm)\b', '\b(start|create) (a|an)? ?timer\b',
+            '\btimer for\b', '^\w+ timer\b', '\bwake me( up)?\b', '\balarm for\b',
+            '\b\d+ ?(second|minute|hour)s? timer\b']
+message = "Timers and alarms aren't supported from the ring."

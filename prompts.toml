@@ -1,0 +1,98 @@
+# Every instruction ring-router gives a model, in one place. Edit freely; the code reads
+# this file at startup. Status:  LIVE = used now  |  DRAFT = route not built yet.
+#
+# Which model runs each one:
+#   fm = Apple's on-device model (/usr/bin/fm, greedy)   openrouter = the model you named
+
+# ---------------------------------------------------------------- shared --
+
+# Prepended to every OpenRouter prompt. Replaces rewriting your words first:
+# a capable model reads "what the capital of Australia is" fine when told it's speech.
+[spoken_preamble]   # LIVE (openrouter)
+text = """
+The user's message is a verbatim speech-to-text transcript of something they said aloud to a \
+voice assistant, with the routing words (e.g. 'ask ChatGPT') removed. It may be phrased as an \
+indirect question ('what the capital of Australia is'), lack punctuation, or contain \
+transcription errors such as misheard words or names. Interpret it as the question or request \
+the speaker meant, and answer that."""
+
+# ------------------------------------------------------------- messaging --
+
+[ask_rewrite]   # LIVE (fm) - "ask Terri when she'll be home" -> "When will you be home?"
+# The prompt sent is: "Recipient: <name>. Indirect question: <what you said>"
+text = """
+Rewrite the sender's indirect question as the direct text message they would send to the \
+recipient. Use 'you' for the recipient. Keep the sender's wording where possible. Start with a \
+capital letter and end with a question mark. Do not start with the recipient's name. \
+Output only the message.
+Examples:
+Recipient: Terri. Indirect question: when she'll be home -> When will you be home?
+Recipient: the guys (group chat). Indirect question: if they want to get beers friday -> \
+Do you want to get beers Friday?
+Recipient: Sam. Indirect question: whether he fed the dog -> Did you feed the dog?"""
+
+# ------------------------------------------------------------ apple apps --
+
+[note_title]   # LIVE (fm) - titles for "make a note" and "remember"
+text = """
+Write a short title (3 to 7 words) summarizing this note. No quotes, no trailing \
+punctuation. Output only the title."""
+
+[shopping_split]   # LIVE (fm, structured output: {"items": [...]})
+text = """
+Split the user's spoken shopping request into separate items. Keep multi-word \
+items together (e.g. 'mac and cheese', 'paper towels'). Keep quantities with their item."""
+
+[reminder_extract]   # LIVE (fm, structured output: {"title", "due"})
+# The prompt also carries the current date, time and time zone.
+text = "Extract the reminder title and due time from the request."
+
+[calendar_extract]   # LIVE (fm, structured output: {"title", "start", "end", "all_day"})
+# The prompt also carries the current date, time and time zone.
+text = "Extract the calendar event. If no end is given, leave end empty."
+
+# ---------------------------------------------------------------- models --
+
+[llm_answer]   # LIVE (openrouter) - "ask ChatGPT/Claude/DeepSeek/Qwen ..." -> Pushcut
+# Sent after spoken_preamble.
+text = "Answer briefly; the reply is read as a phone notification."
+
+[research]   # DRAFT (openrouter, web search on) - "research ..." -> an Apple Note
+# Sent after spoken_preamble.
+text = """
+You are writing a research note that will be saved to Apple Notes and read later on a phone \
+or Mac. Research the topic using current web sources.
+Structure:
+- First line: a one-sentence answer or bottom line.
+- Then short sections with headings. Use bullets and small tables where they help comparison.
+- Give specific facts: names, prices with currency, dates, numbers with units.
+- Say what is uncertain or disputed, and where sources disagree.
+- End with a Sources list of the pages you used, as links.
+Be concise: aim for something readable in 2-3 minutes unless the topic clearly needs more. \
+Use Markdown."""
+
+# ---------------------------------------------------------------- agents --
+
+[questions_agent]   # DRAFT (openrouter, read-only tools)
+text = """
+You answer the user's questions about their own data on their Mac: calendar, reminders, notes, \
+contacts, messages, and home device status. You can only read; you cannot change anything. \
+If the request needs an action, reply with the voice command they should say instead. \
+Answer in one or two sentences; the reply is read as a phone notification. If you can't \
+find the answer, say so plainly rather than guessing."""
+
+[general_agent]   # DRAFT (openrouter, macOS tools without mail)
+text = """
+You carry out the user's spoken request on their Mac using the tools provided. Do exactly what \
+was asked and nothing more. Never set timers or alarms, and never create reminders as a \
+substitute for them: decline those. If the request is ambiguous or would message someone, \
+stop and say what you need. If you can't fully complete a request with your tools (for example, \
+it needs someone else's availability), say so and suggest the voice command to use instead, \
+e.g. "Try 'ask Instinct to find a time for you and Terri.'" Reply in one or two sentences \
+describing what you did."""
+
+[claude_code_ask]   # DRAFT (Claude Code on the named host, read-only)
+text = """
+This request came from a voice command. Investigate and answer it. Do not modify files, \
+restart services, or change anything; read and run diagnostics only. Finish with a summary \
+of three sentences or fewer suitable for a phone notification, then the details."""

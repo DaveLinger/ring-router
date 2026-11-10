@@ -1,0 +1,447 @@
+# Test phrases: what you might say to the ring, and how it must route.
+# Used by tests/test_phrases.py (routing only, no side effects) and by
+#   ring-router sim --file tests/phrases.toml     (end-to-end against the running server)
+# Only the keys listed in a case are checked.
+#   extracted = text the router pulls out after the prefix (before any rewrite)
+#   sends     = exact message that goes out (after the on-device "ask" rewrite);
+#               a list means any of these wordings is acceptable. Checked by
+#               tests/test_messages_live.py, which runs the real /usr/bin/fm model.
+
+# ---------------------------------------------------------------- messaging --
+[[case]]
+say = "Tell Terri I'm on my way."
+sends = "I'm on my way."
+route = "imessage"
+recipient = "terri"
+tier = "strong"
+rewrite = "none"
+extracted = "I'm on my way."
+
+[[case]]
+say = "Ask Terri when she'll be home."
+sends = "When will you be home?"
+route = "imessage"
+recipient = "terri"
+rewrite = "ask_question"
+extracted = "when she'll be home."
+
+[[case]]
+say = "Tell Terry that dinner is ready"
+sends = "Dinner is ready"
+route = "imessage"
+recipient = "terri"
+tier = "strong"
+extracted = "Dinner is ready"
+
+[[case]]
+say = "tell terri to grab milk on the way home"
+sends = "Grab milk on the way home"
+route = "imessage"
+extracted = "Grab milk on the way home"
+
+[[case]]
+say = "Let Terri know I'll be late."
+sends = "I'll be late."
+route = "imessage"
+recipient = "terri"
+extracted = "I'll be late."
+
+[[case]]
+say = "Text Terri running ten minutes behind"
+sends = "Running ten minutes behind"
+route = "imessage"
+extracted = "Running ten minutes behind"
+recipient = "terri"
+
+[[case]]
+say = "Tell Sherry I'm on my way"
+sends = "I'm on my way"
+route = "imessage"
+extracted = "I'm on my way"
+recipient = "terri"
+tier = "weak"
+
+[[case]]
+say = "Tell Harry I'm on my way"
+route = "refuse"
+tier = "unknown"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Tell the kids dinner's ready"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Instinct, can you check the build tonight?"
+sends = "Can you check the build tonight?"
+route = "imessage"
+extracted = "Can you check the build tonight?"
+recipient = "instinct"
+verb = "bare"
+rewrite = "none"
+
+[[case]]
+say = "Hey Instinct, I pushed the fix."
+sends = "I pushed the fix."
+route = "imessage"
+extracted = "I pushed the fix."
+recipient = "instinct"
+rewrite = "none"
+
+[[case]]
+say = "Ask Instinct whether the report is done and what time we're meeting"
+sends = ["Is the report done and what time are we meeting?", "Is the report done and when are we meeting?"]
+route = "imessage"
+extracted = "whether the report is done and what time we're meeting"
+recipient = "instinct"
+rewrite = "ask_question"
+
+[[case]]
+say = "Tell Instinct the deploy is finished."
+sends = "The deploy is finished."
+route = "imessage"
+recipient = "instinct"
+extracted = "The deploy is finished."
+
+[[case]]
+say = "Tell the guys let's hang out tomorrow."
+sends = "Let's hang out tomorrow."
+route = "imessage"
+recipient = "the_guys"
+extracted = "Let's hang out tomorrow."
+
+[[case]]
+say = "Ask the guys if they want to get beers Friday"
+sends = ["Do you want to get beers Friday?", "Do you guys want to get beers Friday?"]
+route = "imessage"
+extracted = "if they want to get beers Friday"
+recipient = "the_guys"
+rewrite = "ask_question"
+
+[[case]]
+say = "Tell me a joke"
+route = "agent"
+extracted = "Tell me a joke"
+
+# ------------------------------------------------------------------ models --
+[[case]]
+say = "Ask ChatGPT what the capital of Australia is"
+route = "llm"
+model = "chatgpt"
+extracted = "what the capital of Australia is"
+
+[[case]]
+say = "Ask chat, how many ounces in a cup?"
+route = "llm"
+model = "chatgpt"
+extracted = "how many ounces in a cup?"
+
+[[case]]
+say = "Tell Chat GPT to write a haiku about rain"
+route = "llm"
+extracted = "to write a haiku about rain"
+model = "chatgpt"
+
+[[case]]
+say = "Ask DeepSeek what's the best Chinese restaurant near me"
+route = "llm"
+model = "deepseek"
+extracted = "what's the best Chinese restaurant near me"
+
+[[case]]
+say = "Ask deep seek about the history of Tiananmen Square"
+route = "llm"
+extracted = "about the history of Tiananmen Square"
+model = "deepseek"
+
+[[case]]
+say = "Ask Claude how to descale an espresso machine"
+route = "llm"
+extracted = "how to descale an espresso machine"
+model = "claude"
+
+[[case]]
+say = "Ask Qwen to translate good morning into Mandarin"
+route = "llm"
+extracted = "to translate good morning into Mandarin"
+model = "qwen"
+
+# ------------------------------------------------------------- claude code --
+[[case]]
+say = "Ask Claude Code on the RackNerd VPS why the websites are down"
+route = "claude_code"
+host = "racknerd"
+mode = "read-only"
+extracted = "why the websites are down"
+
+[[case]]
+say = "Ask Claude Code on rack nerd whether nginx is running"
+route = "claude_code"
+extracted = "whether nginx is running"
+host = "racknerd"
+
+[[case]]
+say = "Tell Claude Code on the Mac mini to restart calsync"
+route = "claude_code"
+extracted = "to restart calsync"
+host = "mac_mini"
+mode = "write"
+
+[[case]]
+say = "Claude Code, why did the backup fail last night?"
+route = "claude_code"
+extracted = "why did the backup fail last night?"
+host = "mac_mini"
+
+[[case]]
+say = "Ask Claude Code on the Synology why it's slow"
+route = "refuse"
+rule = "unknown_host"
+
+# ---------------------------------------------------------------- research --
+[[case]]
+say = "Research the best robot vacuum under 500 dollars"
+route = "research"
+model = "chatgpt"
+extracted = "the best robot vacuum under 500 dollars"
+
+[[case]]
+say = "Research with DeepSeek how tariffs affect used car prices"
+route = "research"
+model = "deepseek"
+extracted = "how tariffs affect used car prices"
+
+# ------------------------------------------------------------------- notes --
+[[case]]
+say = "Make a note: the boat trailer needs new bearings before spring"
+route = "note"
+extracted = "the boat trailer needs new bearings before spring"
+
+[[case]]
+say = "Take a note that the garage code is changing next week"
+route = "note"
+extracted = "the garage code is changing next week"
+
+[[case]]
+say = "Note to self, look into solar panel quotes"
+route = "note"
+extracted = "look into solar panel quotes"
+
+[[case]]
+say = "Remember I parked on level 3, row G"
+route = "remember"
+extracted = "I parked on level 3, row G"
+
+[[case]]
+say = "Remember that the WiFi password at the cabin is on the fridge"
+route = "remember"
+extracted = "The WiFi password at the cabin is on the fridge"
+
+# ------------------------------------------------------------------- lists --
+[[case]]
+say = "Add milk, eggs and mac and cheese to my shopping list"
+route = "list_add"
+list = "shopping"
+extracted = "milk, eggs and mac and cheese"
+
+[[case]]
+say = "Put paper towels on the shopping list."
+route = "list_add"
+list = "shopping"
+extracted = "paper towels"
+
+[[case]]
+say = "Add coffee filters to the grocery list"
+route = "list_add"
+extracted = "coffee filters"
+list = "shopping"
+
+[[case]]
+say = "Shopping list: bananas and dish soap"
+route = "list_add"
+list = "shopping"
+extracted = "bananas and dish soap"
+
+# --------------------------------------------------------------- reminders --
+[[case]]
+say = "Remind me at 5 to call the vet"
+route = "reminder"
+extracted = "at 5 to call the vet"
+location_trigger = false
+
+[[case]]
+say = "Set a reminder for tomorrow morning to renew the registration"
+route = "reminder"
+extracted = "tomorrow morning to renew the registration"
+
+[[case]]
+say = "Remind me in 20 minutes to check the oven"
+route = "reminder"
+extracted = "in 20 minutes to check the oven"
+
+[[case]]
+say = "Remind me when I get home to take out the trash"
+route = "reminder"
+extracted = "when I get home to take out the trash"
+location_trigger = true
+
+# --------------------------------------------------------------- calendar --
+[[case]]
+say = "Add dentist Tuesday at 3 to my calendar"
+route = "calendar"
+extracted = "dentist Tuesday at 3"
+
+[[case]]
+say = "Put lunch with Mike on Friday at noon on my calendar"
+route = "calendar"
+extracted = "lunch with Mike on Friday at noon"
+
+[[case]]
+say = "Schedule an oil change next Saturday at 9am"
+route = "calendar"
+extracted = "an oil change next Saturday at 9am"
+
+# ------------------------------------------------------------------- home --
+[[case]]
+say = "Turn on the living room light"
+route = "home"
+action = "on"
+extracted = "the living room light"
+
+[[case]]
+say = "Turn the porch light off"
+route = "home"
+action = "off"
+extracted = "the porch light"
+
+[[case]]
+say = "Set the master bedroom fan to low"
+route = "home"
+extracted = "the master bedroom fan to low"
+action = "set"
+
+[[case]]
+say = "Lock the front door"
+route = "home"
+extracted = "the front door"
+action = "lock"
+confirm = false
+
+[[case]]
+say = "Unlock the front door"
+route = "home"
+extracted = "the front door"
+action = "unlock"
+confirm = true
+
+[[case]]
+say = "Open the garage"
+route = "home"
+extracted = "the garage"
+action = "open"
+confirm = true
+
+[[case]]
+say = "Goodnight"
+route = "scene"
+scene = "goodnight"
+
+[[case]]
+say = "Good night."
+route = "scene"
+scene = "goodnight"
+
+[[case]]
+say = "Goodnight Terri, love you"
+route = "agent"
+extracted = "Goodnight Terri, love you"
+
+# ------------------------------------------------------------------ cancel --
+[[case]]
+say = "Tell Terri I'll be late. Scrap that."
+route = "cancelled"
+
+[[case]]
+say = "Ask ChatGPT about mortgage rates, cancel cancel"
+route = "cancelled"
+
+[[case]]
+say = "Add eggs to my shopping list, never mind"
+route = "cancelled"
+
+[[case]]
+say = "Turn off the kitchen lights. Forget that."
+route = "cancelled"
+
+[[case]]
+say = "Tell Terri to forget that"
+sends = "Forget that"
+route = "imessage"
+extracted = "Forget that"
+
+[[case]]
+say = "Cancel"
+route = "cancelled"
+
+[[case]]
+say = "Unlock the front door. Don't do that."
+route = "cancelled"
+
+# ---------------------------------------------------------------- refusals --
+[[case]]
+say = "Set a timer for 10 minutes"
+route = "refuse"
+rule = "timers"
+
+[[case]]
+say = "Pasta timer 8 minutes"
+route = "refuse"
+rule = "timers"
+
+[[case]]
+say = "Wake me up at 6:30"
+route = "refuse"
+rule = "timers"
+
+[[case]]
+say = "Set an alarm for 7"
+route = "refuse"
+rule = "timers"
+
+# --------------------------------------------------------------- questions --
+[[case]]
+say = "What's on my calendar Thursday?"
+route = "questions"
+extracted = "What's on my calendar Thursday?"
+
+[[case]]
+say = "Did Terri text me?"
+route = "questions"
+extracted = "Did Terri text me?"
+
+[[case]]
+say = "Is the garage door closed?"
+route = "questions"
+extracted = "Is the garage door closed?"
+
+[[case]]
+say = "Where did I park?"
+route = "questions"
+extracted = "Where did I park?"
+
+[[case]]
+say = "What's on my shopping list"
+route = "questions"
+extracted = "What's on my shopping list"
+
+# ------------------------------------------------------------------ agent --
+[[case]]
+say = "Move my dentist appointment to next week"
+route = "agent"
+extracted = "Move my dentist appointment to next week"
+
+[[case]]
+say = "Um, okay, find a good time for me and Terri to get dinner this week"
+route = "agent"
+extracted = "find a good time for me and Terri to get dinner this week"

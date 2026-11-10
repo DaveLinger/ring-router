@@ -1,0 +1,20 @@
+{
+  "required" : [
+    "items"
+  ],
+  "additionalProperties" : false,
+  "properties" : {
+    "items" : {
+      "items" : {
+        "type" : "string"
+      },
+      "description" : "Each separate item to buy, as spoken",
+      "type" : "array"
+    }
+  },
+  "title" : "ShoppingItems",
+  "x-order" : [
+    "items"
+  ],
+  "type" : "object"
+}
