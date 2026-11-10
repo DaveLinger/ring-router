@@ -106,6 +106,41 @@ def cmd_sim(args) -> int:
     return 0
 
 
+def cmd_check_permissions(args) -> int:
+    """Touch each macOS app once so its permission prompt appears for *this* process tree.
+
+    Run it the way the service runs (launchd), so approvals attach to the service's binaries.
+    Everything is a read except one iMessage to the test recipient (--message-to).
+    """
+    import subprocess  # noqa: PLC0415
+    from . import mcp  # noqa: PLC0415
+    cfg = load_config(args.config)
+    cmd = cfg.section("macos_mcp").get("command", ["npx", "-y", "mcp-macos@4.1.0"])
+    probes = [
+        ("Calendars", lambda: mcp.call_tool(cmd, "calendar_calendars", {"action": "read"})),
+        ("Reminders", lambda: mcp.call_tool(cmd, "reminders_lists", {"action": "read"})),
+        ("Notes (mcp)", lambda: mcp.call_tool(cmd, "notes_folders", {"action": "read"})),
+        ("Notes (AppleScript)", lambda: subprocess.run(
+            ["/usr/bin/osascript", "-e", 'tell application "Notes" to count folders'],
+            check=True, capture_output=True, text=True, timeout=120).stdout),
+        ("Contacts", lambda: mcp.call_tool(cmd, "contacts_people", {"action": "search", "search": "Dave"})),
+    ]
+    rc = cfg.raw.get("recipients", {}).get(args.message_to) if args.message_to else None
+    if rc:
+        to = rc.get("handle")
+        probes.append(("Messages (send)", lambda: mcp.call_tool(cmd, "messages_chat", {
+            "action": "create", "to": to, "text": "ring-router permission check: if you see this, sending works."})))
+    ok = True
+    for name, fn in probes:
+        try:
+            out = str(fn()).strip().replace("\n", " ")
+            print(f"OK    {name}: {out[:400]}", flush=True)
+        except Exception as e:
+            ok = False
+            print(f"FAIL  {name}: {str(e)[:300]}", flush=True)
+    return 0 if ok else 1
+
+
 def cmd_recent(args) -> int:
     from .store import Store  # noqa: PLC0415
     cfg = load_config(args.config, load_secrets=False)
@@ -133,6 +168,9 @@ def main(argv=None) -> int:
     s.add_argument("--bad-signature", action="store_true")
     s.add_argument("--replay", action="store_true", help="send each request twice (dedupe check)")
     s.add_argument("--test-event", action="store_true"); s.set_defaults(fn=cmd_sim)
+    s = sub.add_parser("check-permissions", help="trigger/verify macOS permission prompts")
+    s.add_argument("--message-to", help="recipient key for one test iMessage (e.g. dave)")
+    s.set_defaults(fn=cmd_check_permissions)
     s = sub.add_parser("recent"); s.add_argument("-n", type=int, default=20); s.set_defaults(fn=cmd_recent)
 
     args = ap.parse_args(argv)

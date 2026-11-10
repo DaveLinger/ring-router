@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The ring-router listener (localhost:8642), kept running by launchd.
+     Install:
+       cp launchd/local.ring-router.plist ~/Library/LaunchAgents/
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.plist
+     Restart after code/config changes:
+       launchctl kickstart -k gui/$(id -u)/local.ring-router
+     Logs: ~/Library/Logs/ring-router.log -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.ring-router</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dave/claude-mac-mini/ring-router/.venv/bin/ring-router</string>
+        <string>serve</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dave/claude-mac-mini/ring-router</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>StandardOutPath</key>
+    <string>/Users/dave/Library/Logs/ring-router.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dave/Library/Logs/ring-router.log</string>
+</dict>
+</plist>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- One-off job: runs `ring-router check-permissions` in the same context as the service,
+     so macOS permission prompts (and approvals) attach to the service's binaries. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.ring-router.permcheck</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dave/claude-mac-mini/ring-router/.venv/bin/ring-router</string>
+        <string>check-permissions</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dave/claude-mac-mini/ring-router</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/dave/Library/Logs/ring-router-permcheck.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dave/Library/Logs/ring-router-permcheck.log</string>
+</dict>
+</plist>

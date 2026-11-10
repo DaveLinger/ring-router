@@ -20,8 +20,9 @@ path = "/usr/bin/fm"
 timeout_s = 15
 
 [macos_mcp]
-# Command that starts the mcp-macos server over stdio.
-command = ["npx", "-y", "mcp-macos@4.1.0"]
+# Command that starts the mcp-macos server over stdio. Uses the router's own pinned copy in
+# vendor/ (see README: npm blocks the install script that compiles its EventKit helper).
+command = ["/opt/homebrew/bin/node", "vendor/node_modules/mcp-macos/bin/run.cjs"]
 
 # ---------------------------------------------------------------- recipients --
 # The allowlist. Nobody else can be messaged.
