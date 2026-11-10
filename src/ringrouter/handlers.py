@@ -115,8 +115,8 @@ def h_imessage(r: Route, ctx: Context) -> Result:
         pid = ctx.store.add_pending(ctx.delivery_id, "imessage", payload,
                                     ctx.cfg.section("notify").get("confirm_ttl_s", 300))
         ctx.notify("Confirm message", f"Send to {display}: “{text}”? (heard “{r.params['heard']}”)",
-                   [Button("Send", f"{ctx.public_url}/confirm/{pid}/yes"),
-                    Button("Cancel", f"{ctx.public_url}/confirm/{pid}/no")])
+                   [Button("Send", f"{ctx.public_url}/confirm/{pid}/yes", background=True),
+                    Button("Cancel", f"{ctx.public_url}/confirm/{pid}/no", background=True)])
         return Result("needs_confirm", f"weak match {r.params['heard']!r} -> {display}; confirmation {pid}")
     return send_imessage(payload, ctx, rewrote)
 
@@ -289,8 +289,8 @@ def h_home(r: Route, ctx: Context) -> Result:
     what = f"{r.params['action']} {r.body}".strip()
     if r.params.get("confirm"):
         pid = ctx.store.add_pending(ctx.delivery_id, "home", {"action": r.params["action"], "target": r.body})
-        ctx.notify("Confirm", f"{what}?", [Button("Yes", f"{ctx.public_url}/confirm/{pid}/yes"),
-                                           Button("Cancel", f"{ctx.public_url}/confirm/{pid}/no")])
+        ctx.notify("Confirm", f"{what}?", [Button("Yes", f"{ctx.public_url}/confirm/{pid}/yes", background=True),
+                                           Button("Cancel", f"{ctx.public_url}/confirm/{pid}/no", background=True)])
         return Result("needs_confirm", f"home action needs confirmation: {what} ({pid})")
     msg = f"Home control isn't built yet. Would: {what}"
     ctx.notify("Not done", msg)

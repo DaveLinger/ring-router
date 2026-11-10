@@ -108,7 +108,7 @@ workdir = "~"
 
 [lists.shopping]
 reminders_list = "Shopping list"
-spoken = ["shopping list", "grocery list", "groceries list", "shopping"]
+spoken = ["shopping list", "grocery list", "groceries list", "groceries", "shopping"]
 
 # ----------------------------------------------------------------- calendars --
 

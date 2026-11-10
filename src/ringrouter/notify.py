@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 class Button:
     label: str
     url: str
+    background: bool = False   # True: Pushcut calls the URL silently (confirm buttons); False: opens it
 
 
 @dataclass
@@ -54,8 +55,9 @@ class PushcutNotifier:
     def send(self, notice: Notice) -> None:
         payload: dict = {"title": notice.title, "text": notice.text[:1000]}
         if notice.buttons:
-            payload["actions"] = [{"name": b.label, "url": b.url, "urlBackgroundOptions": {"httpMethod": "POST"}}
-                                  for b in notice.buttons]
+            payload["actions"] = [
+                {"name": b.label, "url": b.url, **({"urlBackgroundOptions": {"httpMethod": "POST"}} if b.background else {})}
+                for b in notice.buttons]
         headers = {"Content-Type": "application/json"}
         if self.webhook_url:
             url = self.webhook_url

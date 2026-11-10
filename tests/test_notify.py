@@ -26,6 +26,15 @@ def test_pushcut_webhook_url_needs_no_key(monkeypatch):
     assert sent["url"].endswith("/SECRET/notifications/Ring%20Router")
     assert not any(k.lower() == "api-key" for k in sent["headers"])
     assert sent["body"]["title"] == "Sent to Terri" and sent["body"]["actions"][0]["url"] == "https://x/confirm/1/no"
+    assert "urlBackgroundOptions" not in sent["body"]["actions"][0]          # plain button opens the URL
+
+
+def test_pushcut_background_vs_link_buttons(monkeypatch):
+    sent = capture(monkeypatch)
+    PushcutNotifier("Ring Router", webhook_url="https://p/x").send(Notice("Confirm", "Send?", [
+        Button("Send", "https://x/confirm/1/yes", background=True), Button("Full answer", "https://x/answers/abc")]))
+    send, link = sent["body"]["actions"]
+    assert send["urlBackgroundOptions"] == {"httpMethod": "POST"} and "urlBackgroundOptions" not in link
 
 
 def test_pushcut_api_key(monkeypatch):
