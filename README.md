@@ -71,6 +71,7 @@ shopping lists, and reading dates out of reminders and events.
 | *"Add milk, eggs and mac and cheese to my shopping list"* | 🛒 Three reminders: Milk · Eggs · Mac and cheese |
 | *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder due tomorrow 17:00 |
 | *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on Tuesday at 15:00 |
+| *"Add date night Friday at 7 to our calendar"* | 📅 Goes on the shared calendar (spoken names map to calendars in config) |
 | *"Turn on the living room light"* | 💡 Hubitat or HomeKit |
 | *"Unlock the front door"* | 🔓 Unlocks it (or asks first, if you turn that on) |
 | *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Web-backed answer as a notification, full text + sources a tap away |
@@ -161,7 +162,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (155 tests)
+.venv/bin/pytest -q               # everything (162 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -179,7 +180,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 155 tests | ✅ Done |
+| Ring simulator, phrase answer key, 162 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |

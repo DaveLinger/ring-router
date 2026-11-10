@@ -111,9 +111,9 @@ spoken = ["shopping list", "grocery list", "groceries list", "shopping"]
 # ----------------------------------------------------------------- calendars --
 
 [calendars]
-default = "CHANGE-ME"        # what "my calendar" means
-# aliases: spoken name -> Calendar name
-aliases = { }
+default = "CHANGE-ME"        # what "my calendar" means, e.g. "Dave"
+# aliases: spoken name (before the word "calendar") -> Calendar name
+aliases = { "our" = "Shared", "shared" = "Shared", "work" = "Work", "my work" = "Work" }
 
 # -------------------------------------------------------------------- notes --
 

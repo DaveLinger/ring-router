@@ -213,11 +213,12 @@ def _calendar(t: str, raw: dict) -> Route | None:
     cals = raw.get("calendars", {})
     aliases = {k.lower(): v for k, v in cals.get("aliases", {}).items()}
     names = sorted(list(aliases) + ["my", "the"], key=len, reverse=True)
-    m = re.search(SEP + r"+(?:to|on|in)" + SEP + r"+(" + "|".join(re.escape(n) for n in names) + r")"
+    alt = "|".join(re.escape(n).replace(r"\ ", SEP + "+") for n in names)
+    m = re.search(SEP + r"+(?:to|on|in)" + SEP + r"+(?:(?:the|my)" + SEP + r"+)?(" + alt + r")"
                   + SEP + r"+calendar" + SEP + r"*$", t, re.IGNORECASE)
     v = match_prefix(t, ["add", "put", "schedule", "create an event", "make an event", "book"])
     if v and m and m.start() > v[1]:
-        which = m.group(1).lower()
+        which = re.sub(SEP + "+", " ", m.group(1).lower())
         calendar = aliases.get(which, cals.get("default"))
         return Route("calendar", t, body=strip_body(t[v[1]:m.start()]), params={"calendar": calendar},
                      reason="calendar suffix")
