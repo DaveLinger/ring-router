@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
@@ -20,6 +21,7 @@ from .llm import load_profile
 from .prompts import prompt
 
 log = logging.getLogger(__name__)
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")   # no startup banner in the service log
 
 READ = {"read", "search"}
 
