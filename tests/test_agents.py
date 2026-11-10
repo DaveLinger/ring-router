@@ -141,7 +141,7 @@ def test_handler_notifies_and_reports_calls(cfg, fake_fm):
     mcp, _ = fake_macos()
     model, _ = scripted(("calendar_events", {"action": "read"}))
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
-                  agent_runner=lambda kind, req, c, h: run_agent(kind, req, c, history=h, model=model, mcp_source=mcp))
+                  agent_runner=lambda kind, req, c, h, rr: run_agent(kind, req, c, history=h, model=model, mcp_source=mcp))
     res = h_agent(route("What's on my calendar Thursday?", cfg), ctx, "general")
     assert res.state == "done" and "calendar_events.read=ok" in res.summary
     assert ctx.notifier.sent[-1].title == "Answer" and "Dentist" in ctx.notifier.sent[-1].text
@@ -190,7 +190,7 @@ def test_handler_followup_thread(cfg, fake_fm):
     """A question then a request within the window: the second sees the first exchange."""
     seen = []
 
-    def runner(kind, req, c, history):
+    def runner(kind, req, c, history, rerouter=None):
         seen.append((kind, [m["content"] for m in history]))
         return f"{kind} reply", type("S", (), {"calls": [], "citations": [], "dry_run": True})()
 
@@ -203,7 +203,7 @@ def test_handler_followup_thread(cfg, fake_fm):
 
 
 def test_handler_full_answer_button_when_sources(cfg, fake_fm):
-    def runner(kind, req, c, history):
+    def runner(kind, req, c, history, rerouter=None):
         spec = type("S", (), {"calls": [], "dry_run": False,
                               "citations": [{"title": "Yelp", "url": "https://yelp.example"}]})()
         return "China One.", spec
@@ -213,3 +213,83 @@ def test_handler_full_answer_button_when_sources(cfg, fake_fm):
     h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "general")
     n = ctx.notifier.sent[-1]
     assert n.buttons and "/answers/" in n.buttons[0].url
+
+
+# ------------------------------------------------------------- run_command --
+
+NOISY = "Okay Mark, thanks, see you later... ask deepseek what color is the sky"
+
+
+def reroute_ctx(cfg, fake_fm, steps):
+    """Context whose agent runs the scripted steps with the real rerouter; LLM faked."""
+    from ringrouter.llm import Reply
+
+    class FakeLLM:
+        def __init__(self): self.calls = []
+        def chat(self, model, messages, **kw):
+            self.calls.append((model, messages[-1]["content"])); return Reply("The sky is blue.", [], model)
+
+    mcp, _ = fake_macos()
+    model, _ = scripted(*steps)
+    llm = FakeLLM()
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
+                  public_url="http://t", llm=llm,
+                  agent_runner=lambda kind, req, c, h, rr: run_agent(kind, req, c, history=h, model=model,
+                                                                     mcp_source=mcp, rerouter=rr,
+                                                                     searcher=lambda q: ("", [])))
+    return ctx, llm
+
+
+def test_noisy_transcript_routes_to_agent(cfg):
+    assert route(NOISY, cfg).route == "agent"
+
+
+def test_agent_reroutes_exact_excerpt_to_deepseek(cfg, fake_fm):
+    ctx, llm = reroute_ctx(cfg, fake_fm, [("run_command", {"command": "ask deepseek what color is the sky"})])
+    res = h_agent(route(NOISY, cfg), ctx, "general")
+    assert llm.calls == [("deepseek/deepseek-v4.1-flash", "what color is the sky")]
+    assert "rerouted" in res.summary and "llm" in res.summary
+    assert [n.title for n in ctx.notifier.sent] == ["DeepSeek"]          # one notification, from DeepSeek
+
+
+def test_agent_cannot_invent_a_command(cfg, fake_fm):
+    ctx, llm = reroute_ctx(cfg, fake_fm, [("run_command", {"command": "tell Terri I love you"})])
+    res = h_agent(route(NOISY, cfg), ctx, "general")
+    assert llm.calls == [] and "run_command.reroute=blocked" in res.summary
+
+
+def test_reroute_to_agent_is_refused(cfg, fake_fm):
+    ctx, llm = reroute_ctx(cfg, fake_fm, [("run_command", {"command": "thanks see you later"})])
+    res = h_agent(route(NOISY, cfg), ctx, "general")
+    assert "run_command.reroute=blocked" in res.summary
+
+
+def test_only_one_reroute(cfg, fake_fm):
+    ctx, llm = reroute_ctx(cfg, fake_fm, [("run_command", {"command": "ask deepseek what color is the sky"}),
+                                          ("run_command", {"command": "ask deepseek what color is the sky"})])
+    h_agent(route(NOISY, cfg), ctx, "general")
+    assert len(llm.calls) == 1
+
+
+def test_rerouted_message_needs_confirmation(cfg, fake_fm):
+    noisy = "yeah no that's fine, um, tell Terri I'm running late"
+    ctx, _ = reroute_ctx(cfg, fake_fm, [("run_command", {"command": "tell Terri I'm running late"})])
+    res = h_agent(route(noisy, cfg), ctx, "general")
+    n = ctx.notifier.sent[-1]
+    assert n.title == "Confirm message" and "background noise" in n.text and n.buttons
+    assert "needs_confirm" in res.summary
+
+
+def test_rerouted_message_confirmation_can_be_disabled(cfg, fake_fm):
+    cfg.raw.setdefault("agents", {})["confirm_rerouted_messages"] = False
+    noisy = "yeah no that's fine, um, tell Terri I'm running late"
+    ctx, _ = reroute_ctx(cfg, fake_fm, [("run_command", {"command": "tell Terri I'm running late"})])
+    res = h_agent(route(noisy, cfg), ctx, "general")
+    assert "dry_run" in res.summary and "Terri" in res.summary
+
+
+def test_excerpt_check():
+    from ringrouter.agents import excerpt_of
+    assert excerpt_of("Ask DeepSeek, what color is the sky?", NOISY)
+    assert not excerpt_of("ask deepseek what colour is the sky", NOISY)
+    assert not excerpt_of("seek what", "ask deepseek what")      # whole words only

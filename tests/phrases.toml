@@ -120,6 +120,20 @@ recipient = "the_guys"
 rewrite = "ask_question"
 
 [[case]]
+say = "Hey so I was thinking about the weather today, it's been really nice out"
+route = "agent"
+
+[[case]]
+say = "Hey Terri, dinner's ready"
+route = "imessage"
+recipient = "terri"
+extracted = "Dinner's ready"
+
+[[case]]
+say = "Okay Mark, thanks, see you later... ask deepseek what color is the sky"
+route = "agent"
+
+[[case]]
 say = "Tell me a joke"
 route = "agent"
 extracted = "Tell me a joke"

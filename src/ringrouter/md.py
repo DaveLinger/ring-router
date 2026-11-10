@@ -80,6 +80,7 @@ def plain(text: str) -> str:
     t = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"\1", t)
     t = re.sub(r"`([^`]+)`", r"\1", t)
     t = re.sub(r"^\s*[-*+]\s+", "\u2022 ", t, flags=re.M)
+    t = re.sub(r"\(\s*[,;\s]*\)", "", t)                              # "(, )" left after dropping cites
     t = re.sub(r"[ \t]+", " ", t)
     return re.sub(r" +([.,;:!?])", r"\1", t).strip()
 

@@ -276,6 +276,8 @@ def _message(t: str, raw: dict) -> Route | None:
         rm = recipients.resolve(t, pos, recips)
         if rm is None:
             return None
+        if verb in VERBS_ASK and verb != "ask" and rm.tier == "unknown":
+            return None   # "hey so I was thinking..." is just talk, not a message to someone named "so"
         # "ask X ..." is indirect speech (rewrite); "hey X, ..." is direct address (send as spoken)
         kind = "ask" if verb == "ask" else "hey" if verb in VERBS_ASK else "tell"
         return _message_route(t, rm, kind, t[rm.end:])

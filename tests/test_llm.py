@@ -112,6 +112,7 @@ def test_plain_drops_bare_domain_citations():
     from ringrouter.md import plain
     assert plain("Tops at 4.2/5. [stacker.com](https://s.example) Runners-up . **A**") == "Tops at 4.2/5. Runners-up. A"
     assert plain("See [the review](https://r.example).") == "See the review."
+    assert plain("Blue, from all directions ([a.com](https://a), [b.org](https://b)). Next.") == "Blue, from all directions. Next."
 
 
 def test_markdown_to_html():

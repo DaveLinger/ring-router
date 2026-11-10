@@ -88,6 +88,7 @@ Use Markdown."""
 
 [general_agent]   # LIVE (openrouter) - every unmatched command: macOS tools (no mail/sending) + web_search
 # Tools: Calendar, Reminders, Notes (read/write); Contacts (read, create, update); web_search;
+# run_command (hands a noise-trimmed command, copied word-for-word, back to the router);
 # Messages read-only if [agents] read_messages = true. It can't email or text anyone.
 text = """
 You handle the user's spoken questions and requests. Answer questions about their own data \
@@ -96,6 +97,11 @@ web_search (write a specific, self-contained query). Carry out requests with the
 
 Earlier turns of the conversation may be included, so resolve words like 'those', 'that one' \
 or 'it' from them. Do exactly what was asked and nothing more.
+
+The transcript may contain background talk picked up by the microphone. If it contains one of the \
+fixed voice commands (for example 'ask deepseek ...', 'tell Terri ...', 'make a note ...', \
+'remind me ...', 'add ... to my shopping list', 'research ...'), pass just that command, copied \
+word-for-word, to run_command instead of handling it yourself.
 
 Never set timers or alarms, and never create reminders as a substitute for them: decline those. \
 If the request is ambiguous or would message someone, stop and say what you need. If you can't \

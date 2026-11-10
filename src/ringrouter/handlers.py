@@ -16,7 +16,7 @@ from .fm import FM, checked_rewrite
 from .llm import LLMStore, OpenRouter, Reply, load_profile
 from .notify import Button, Notice
 from .prompts import prompt
-from .router import Route
+from .router import Route, route
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class Context:
     llm: OpenRouter = field(default=None)
     llm_store: LLMStore = field(default=None)
     notes_writer: Callable = field(default=None)   # (title, html, folder) -> None
-    agent_runner: Callable = field(default=None)   # (kind, request, cfg, history) -> (text, AgentSpec)
+    agent_runner: Callable = field(default=None)   # (kind, request, cfg, history, rerouter) -> (text, AgentSpec)
 
     def __post_init__(self):
         if self.mcp_call is None:
@@ -386,13 +386,28 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
     """General agent: questions and requests (macOS tools without mail/sending, web search)."""
     window = int(ctx.cfg.section("openrouter").get("followup_window_s", 600))
     history = ctx.llm_store.history(AGENT_THREAD, window)
+    def rerouter(command: str) -> tuple[str, str]:
+        """Run a trimmed command from the top of the pipeline (called by the agent's run_command)."""
+        sub_r = route(command, ctx.cfg)
+        if sub_r.route == "agent":
+            return "agent", "not a fixed command"
+        if sub_r.route == "imessage" and ctx.cfg.section("agents").get("confirm_rerouted_messages", True):
+            sub_r.params["tier"] = "weak"            # noise around it: ask before texting anyone
+            sub_r.params["heard"] = f"{sub_r.params.get('heard', '')} (picked out of background noise)"
+        log.info("delivery %s: agent rerouted %r -> %s", ctx.delivery_id[:8], command, sub_r.describe())
+        res = run(sub_r, ctx)
+        return sub_r.route, f"{res.state}: {res.summary}"
+
     try:
-        text, spec = ctx.agent_runner(kind, r.body, ctx.cfg, history)
+        text, spec = ctx.agent_runner(kind, r.body, ctx.cfg, history, rerouter)
     except Exception as e:
         log.exception("%s agent failed", kind)
         ctx.notify("Not done", f"{e}. Heard: \u201c{r.transcript}\u201d")
         return Result("failed", f"{kind} agent error: {e}")
     ctx.llm_store.remember(AGENT_THREAD, r.body, text)
+    if getattr(spec, "rerouted", None):   # the rerouted route already notified the user
+        rr = spec.rerouted[0]
+        return Result("done", f"agent rerouted {rr['command']!r} -> {rr['route']}: {rr['summary']}")
     calls = ", ".join(f"{c['tool']}.{c['action']}={c['result']}" for c in spec.calls) or "no tools"
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
     dry = any(c["result"] == "dry_run" for c in spec.calls)
@@ -411,9 +426,9 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
 AGENT_THREAD = "agent"   # follow-up thread key for the general agent
 
 
-def _default_agent_runner(kind: str, request: str, cfg, history: list[dict] | None = None):
+def _default_agent_runner(kind: str, request: str, cfg, history: list[dict] | None = None, rerouter=None):
     from .agents import run_agent  # noqa: PLC0415  (pydantic-ai imported only when an agent runs)
-    return run_agent(kind, request, cfg, history=history)
+    return run_agent(kind, request, cfg, history=history, rerouter=rerouter)
 
 
 def _stub(name: str) -> Callable:

@@ -78,6 +78,7 @@ shopping lists, and reading dates out of reminders and events.
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
 | *"What's on my calendar Thursday?"* | 🧠 General agent reads your calendar |
 | *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 General agent searches the web; follow-ups keep the thread |
+| *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 Agent spots the buried command and hands it to DeepSeek |
 | *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
 | *"Tell Harry I'm on my way"* | 🚫 Not on the allowlist, nothing sent |
 | *"Set a timer for 10 minutes"* | 🚫 Refused (timers aren't supported) |
@@ -93,6 +94,8 @@ shopping lists, and reading dates out of reminders and events.
   you hold the button, so what you say runs.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
 - **No double texts.** A send that times out is marked unknown and never retried automatically.
+- **Noise-tolerant, not inventive.** When background talk hides a command, the agent can hand it back to
+  the router, but only as a word-for-word excerpt of what you said, and a rerouted message asks first.
 - **The agent can't text or email.** It gets calendar, reminders, notes, contacts and web search; allowed
   tools *and actions* are enforced in code, not just the prompt.
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.
@@ -155,7 +158,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (144 tests)
+.venv/bin/pytest -q               # everything (155 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -173,7 +176,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 144 tests | ✅ Done |
+| Ring simulator, phrase answer key, 155 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Built and tested; needs your OpenRouter key to go live |

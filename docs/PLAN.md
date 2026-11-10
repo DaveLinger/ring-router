@@ -194,11 +194,19 @@ landed on an agent that couldn't write. One agent with a shared conversation thr
 | Notes | read, create, update |
 | Contacts | read, create, update |
 | web_search | the agent writes its own query; one OpenRouter web-plugin call (`[agents] web_search_model`) |
+| run_command | hands a noise-trimmed, word-for-word command back to the router (see below) |
 | Messages | read only, and only if `[agents] read_messages = true` (needs Full Disk Access) |
 | Mail | none |
 
 - Tools not in the table are invisible. Each mcp-macos tool takes an `action` argument, so a guard checks
   every call and refuses anything not allowed. In dry run, writes return "DRY RUN: would…".
+- **Background noise → `run_command`:** if a transcript like "okay Mark, thanks, see you later… ask
+  deepseek what color is the sky" misses every prefix, the agent can hand the buried command back to
+  the top of the pipeline, where it gets normal routing, allowlist, tiers, cancels and dry run. Safeguards
+  in code: the command must be a **word-for-word excerpt** of the transcript (the agent can trim noise,
+  never add or change words); a command that routes back to the agent is refused; once per request; a
+  rerouted *message* needs a Send/Cancel tap (`[agents] confirm_rerouted_messages`); the rerouted route
+  sends the only notification.
 - **Follow-ups:** the agent keeps one conversation thread (10-minute window), passed as message history,
   so "Which of those is cheapest?" or "Why isn't the Tesla Model S Plaid on this list?" work naturally.
 - Instructions combine the spoken-transcript preamble, `profile.md`, `prompts.toml` and the current date/time.

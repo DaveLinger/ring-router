@@ -79,6 +79,7 @@ model = "anthropic/claude-sonnet-5.5"
 read_messages = false   # let the agent read (never send) Messages; needs Full Disk Access
 web_search_model = "deepseek/deepseek-v4.1-flash"   # backs the agents' web_search tool
 web_results = 5
+confirm_rerouted_messages = true   # a message the agent picks out of background noise needs a Send tap
 
 [research]
 web_results = 8

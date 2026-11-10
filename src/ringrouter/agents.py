@@ -48,6 +48,7 @@ class AgentSpec:
     dry_run: bool = True
     calls: list[dict] = field(default_factory=list)   # audit log of tool calls this run
     citations: list[dict] = field(default_factory=list)   # sources found by web_search this run
+    rerouted: list[dict] = field(default_factory=list)    # commands handed back to the router
 
 
 def spec_for(kind: str, cfg) -> AgentSpec:
@@ -145,11 +146,21 @@ def history_messages(history: list[dict]) -> list:
     return out
 
 
+def excerpt_of(command: str, transcript: str) -> bool:
+    """True if `command` appears word-for-word in `transcript` (case/punctuation ignored)."""
+    from .text import simple  # noqa: PLC0415
+
+    c, t = simple(command), simple(transcript)
+    return bool(c) and f" {c} " in f" {t} "
+
+
 def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None, model=None,
-              mcp_source=None, searcher=None) -> tuple[str, AgentSpec]:
+              mcp_source=None, searcher=None, rerouter=None) -> tuple[str, AgentSpec]:
     """Run one agent request synchronously. Returns (reply text, spec with the call audit log).
 
-    history: earlier {'role','content'} turns of the agent conversation (follow-ups).
+    history:  earlier {'role','content'} turns of the agent conversation (follow-ups).
+    rerouter: callable(command) -> (route_name, summary) that runs a command through the router
+              from the top. Enables the run_command tool.
     """
     from pydantic_ai import Agent, Tool  # noqa: PLC0415
 
@@ -167,8 +178,32 @@ def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None
         sources = "\n".join(f"- {c['title']}: {c['url']}" for c in cites)
         return text + (f"\n\nSources:\n{sources}" if sources else "")
 
+    def run_command(command: str) -> str:
+        """Hand a voice command back to the router when the transcript contains one of the fixed
+        commands (e.g. 'ask deepseek ...', 'tell Terri ...', 'make a note ...', 'remind me ...',
+        'add ... to my shopping list', 'research ...') surrounded by background talk or noise.
+        `command` must be copied EXACTLY from the transcript: only trim the noise around it, never
+        add, change or reword words. Use at most once."""
+        entry = {"tool": "run_command", "action": "reroute", "args": {"command": command}}
+        if spec.rerouted:
+            entry["result"] = "blocked"; spec.calls.append(entry)
+            return "Refused: a command was already handed back once for this request."
+        if not excerpt_of(command, request):
+            entry["result"] = "blocked"; spec.calls.append(entry)
+            return ("Refused: the command must be copied word-for-word from the transcript. "
+                    "Only remove the surrounding noise; don't add or change words.")
+        route_name, summary = rerouter(command)
+        if route_name == "agent":
+            entry["result"] = "blocked"; spec.calls.append(entry)
+            return "That isn't one of the fixed commands, so handle the request yourself."
+        entry["result"] = "ok"; spec.calls.append(entry)
+        spec.rerouted.append({"command": command, "route": route_name, "summary": summary})
+        return (f"Handed to the {route_name} route: {summary}. The user has been notified by that "
+                f"route; reply with one short line saying what you handed off.")
+
+    tools = [Tool(web_search)] + ([Tool(run_command)] if rerouter else [])
     agent = Agent(model or default_model(cfg), instructions=instructions(spec),
                   toolsets=[build_toolset(spec, mcp_source or default_mcp_source(cfg))],
-                  tools=[Tool(web_search)], retries=2, tool_timeout=90)
+                  tools=tools, retries=2, tool_timeout=180)
     result = agent.run_sync(request, message_history=history_messages(history or []) or None)
     return str(result.output).strip(), spec
