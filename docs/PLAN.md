@@ -121,11 +121,14 @@ If a transcript ends with a cancel phrase, nothing runs; Pushcut says "Cancelled
 **Later:** a separate "cancel" recording cancels the most recent unfinished action, and mid-sentence
 corrections ("…scrap that, tell Terri I'm on my way") run only the part after the cancel phrase.
 
-### Taking back a sent message (later)
+### Taking back a sent message (deferred)
+
+**Decision (Nov 2026):** strong-match messages send immediately. Both options below are parked;
+revisit if real use shows a need.
 
 | Option | How | Trade-off |
 | --- | --- | --- |
-| **Send delay** (build first) | Each message waits a few seconds; a "cancel" in that window stops it | Reliable for SMS and any device; every message arrives slightly later (per-recipient, can be 0) |
+| **Send delay** | Each message waits a few seconds; a "cancel" in that window stops it | Reliable for SMS and any device; every message arrives slightly later (per-recipient, can be 0) |
 | iMessage **Undo Send** (experiment) | UI-scripts Messages' own Undo Send | Messages' AppleScript only has `send`, so it's fragile; needs Accessibility and a logged-in session; 2-minute window; old OS versions still see the original |
 
 ### Recipient tiers
