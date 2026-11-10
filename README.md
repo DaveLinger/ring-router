@@ -64,6 +64,7 @@ shopping lists, and reading dates out of reminders and events.
 | --- | --- |
 | *"Tell Terri I'm on my way."* | 💬 iMessages Terri: **"I'm on my way."** |
 | *"Ask Terri when she'll be home."* | 💬 Rewritten on-device: **"When will you be home?"** |
+| *"Hey Terri, dinner's ready"* | 💬 Sent as spoken: **"Dinner's ready"** |
 | *"Tell the guys let's hang out tomorrow."* | 💬 Posts to the group chat |
 | *"Make a note: the boat trailer needs new bearings"* | 📝 New note titled **"Boat Trailer Bearings Replacement"** |
 | *"Remember I parked on level 3, row G"* | 📝 Saved to the **Remember** folder |
@@ -78,6 +79,8 @@ shopping lists, and reading dates out of reminders and events.
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
 | *"What's on my calendar Thursday?"* | 🧠 General agent reads your calendar |
 | *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 General agent searches the web; follow-ups keep the thread |
+| *"Can you add dinner at the cheapest one Friday at 7 to my calendar?"* | 🧠 Same agent, same thread: question-shaped requests just work |
+| *"Make a new contact named John Smith, 555-1212"* | 👤 General agent creates the contact |
 | *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 Agent spots the buried command and hands it to DeepSeek |
 | *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
 | *"Tell Harry I'm on my way"* | 🚫 Not on the allowlist, nothing sent |
@@ -179,9 +182,9 @@ phrases as you think of them; the tests fail until the router agrees.
 | Ring simulator, phrase answer key, 155 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
-| Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Built and tested; needs your OpenRouter key to go live |
-| Research notes (web search → Apple Note) | ✅ Built and tested; note writing waits on the Notes permission |
-| General agent (Pydantic AI): macOS tools, web search, follow-ups | ✅ Built; web answers live-tested; macOS tools wait on permission prompts |
+| Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
+| Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
+| General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | Home, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
 | Tailscale Funnel tunnel, launchd service | ⬜ Not started |
 

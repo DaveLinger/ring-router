@@ -345,10 +345,10 @@ Every route starts in dry run until you've watched it behave.
 | **0. Capture** | Ring setup, Tailscale Funnel, logging endpoint | Real requests verify; "Webhook only" confirmed |
 | **1. Skeleton** ✅ | Checks, store, parser, background jobs, notifier, simulator | Recordings echo back; tests pass |
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Cases 1–4 live; weak-match confirm works |
-| **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Answers arrive by Pushcut (needs API key to go live) |
+| **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Live-tested with all four models and research (notes wait on the Notes permission) |
 | **4. Apple apps** | Notes, reminders, calendar live; EventKit location helper | Cases 5–7 work incl. "when I get home" |
 | **5. Home** | Aliases, Hubitat + HomeMCPBridge, optional confirm-first actions | Case 8 through both backends |
-| **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, tool/action guard | Unmatched commands handled or declined (needs key + permissions to go live) |
+| **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, `run_command`, tool/action guard | Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → research → Claude Code per host → Focus (experimental) | Each live in order |
 
 Tier 3b and the gesture mode switch come later, if real use shows they're worth it.
@@ -357,11 +357,12 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 
 ## Open questions and risks
 
-- [ ] Tunnel: Tailscale Funnel (leaning) or Cloudflare Tunnel? Tailscale isn't installed yet.
+- [ ] Tunnel: Tailscale Funnel chosen; install and sign-in need a VNC session for the macOS prompts.
+- [ ] macOS permission prompts (Messages, Notes, Reminders, Calendars, Contacts): also need VNC.
 - [ ] Which calendars need spoken names besides "my calendar"? What's the default?
 - [ ] Home coordinates and radius for "when I get home".
 - [ ] Device list and spoken names.
-- [ ] OpenRouter model IDs for ChatGPT, Claude, DeepSeek, Qwen.
+- [x] OpenRouter model IDs: `gpt-6.1-terra`, `claude-sonnet-5.5`, `deepseek-v4.1-flash`, `qwen3.8-flash`; agent on `claude-sonnet-5.5`.
 - [ ] How long the Pebble app waits for a response.
 - [ ] Pushcut action-button payload format on your plan.
 
