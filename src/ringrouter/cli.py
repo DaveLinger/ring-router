@@ -36,7 +36,7 @@ def cmd_init(args) -> int:
             continue
         write_secret(name, secrets.token_urlsafe(32))
         print(f"{name}: created in {ENV_FILE} (mode 600)")
-    print("Optional secrets: ring-router set-secret openrouter_api_key | pushcut_api_key | hubitat_token")
+    print("Optional secrets: ring-router set-secret openrouter_api_key | pushcut_webhook_url | hubitat_token")
     print("(or edit .env directly: RING_ROUTER_<NAME>=value)")
     return 0
 

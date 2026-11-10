@@ -41,24 +41,28 @@ class ConsoleNotifier:
 
 
 class PushcutNotifier:
-    """POST https://api.pushcut.io/v1/notifications/<name> (API-Key header).
-
-    Button actions call our /confirm URLs in the background. Field names follow
-    Pushcut's Web API docs; verify against your account in phase 1.
+    """Pushcut notification, by either:
+      * webhook_url: the notification's own URL from the Pushcut app (secret built in), or
+      * api_key + notification name: POST https://api.pushcut.io/v1/notifications/<name>.
+    The JSON body (title, text, actions) overrides the notification's defaults either way.
+    Button actions call our /confirm URLs in the background.
     """
 
-    def __init__(self, api_key: str, notification: str):
-        self.api_key, self.notification = api_key, notification
+    def __init__(self, notification: str, api_key: str | None = None, webhook_url: str | None = None):
+        self.api_key, self.notification, self.webhook_url = api_key, notification, webhook_url
 
     def send(self, notice: Notice) -> None:
         payload: dict = {"title": notice.title, "text": notice.text[:1000]}
         if notice.buttons:
             payload["actions"] = [{"name": b.label, "url": b.url, "urlBackgroundOptions": {"httpMethod": "POST"}}
                                   for b in notice.buttons]
-        req = urllib.request.Request(
-            "https://api.pushcut.io/v1/notifications/" + urllib.parse.quote(self.notification),
-            data=json.dumps(payload).encode(), method="POST",
-            headers={"API-Key": self.api_key, "Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        if self.webhook_url:
+            url = self.webhook_url
+        else:
+            url = "https://api.pushcut.io/v1/notifications/" + urllib.parse.quote(self.notification)
+            headers["API-Key"] = self.api_key
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST", headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=10) as r:
                 r.read()
@@ -68,6 +72,7 @@ class PushcutNotifier:
 
 def make_notifier(cfg):
     n = cfg.section("notify")
-    if n.get("provider") == "pushcut" and cfg.secret("pushcut_api_key"):
-        return PushcutNotifier(cfg.secret("pushcut_api_key"), n.get("pushcut_notification", "Ring Router"))
+    if n.get("provider") == "pushcut" and (cfg.secret("pushcut_webhook_url") or cfg.secret("pushcut_api_key")):
+        return PushcutNotifier(n.get("pushcut_notification", "Ring Router"),
+                               api_key=cfg.secret("pushcut_api_key"), webhook_url=cfg.secret("pushcut_webhook_url"))
     return ConsoleNotifier()

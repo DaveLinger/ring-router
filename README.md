@@ -131,8 +131,8 @@ cp config.example.toml config.toml   # recipients, models, hosts, lists... (git-
 | `profile.md` | Facts about you added to every model prompt (location for "near me", etc.) | ❌ (see `profile.example.md`) |
 | `tests/phrases.toml` | The answer key: phrases and how they must route and what they send | ✅ |
 
-Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_api_key`,
-`hubitat_token`), or edit `.env` directly.
+Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_webhook_url`,
+`hubitat_token`), or edit `.env` directly. For Pushcut, the notification's Webhook URL is enough; no API key needed.
 
 ### Commands
 
@@ -162,7 +162,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (162 tests)
+.venv/bin/pytest -q               # everything (164 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -180,7 +180,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 162 tests | ✅ Done |
+| Ring simulator, phrase answer key, 164 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
