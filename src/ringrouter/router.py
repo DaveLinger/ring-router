@@ -259,7 +259,7 @@ def _home(t: str, raw: dict) -> Route | None:
             action = "set"
         else:
             return None
-    confirm = action in ("unlock", "open") and bool(re.search(r"\b(door|lock|garage|gate)\b", rest, re.I))
+    confirm = action in raw.get("home", {}).get("confirm_actions", [])
     return Route("home", t, body=rest, verb=verb, params={"action": action, "confirm": confirm},
                  reason="home control verb")
 

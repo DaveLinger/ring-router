@@ -65,7 +65,7 @@ shopping lists, and reading dates out of reminders and events.
 | *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder due tomorrow 17:00 |
 | *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on Tuesday at 15:00 |
 | *"Turn on the living room light"* | 💡 Hubitat or HomeKit |
-| *"Unlock the front door"* | 🔐 **Asks you first** in Pushcut |
+| *"Unlock the front door"* | 🔓 Unlocks it (or asks first, if you turn that on) |
 | *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Answer arrives as a notification |
 | *"Research the best robot vacuum under $500"* | 🔎 A research note in Apple Notes |
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
@@ -80,7 +80,9 @@ shopping lists, and reading dates out of reminders and events.
 - **Allowlist only.** Messages go only to people and chats in your config. Close-but-not-exact names
   ("Sherry" for Terri) need a **Send / Cancel** tap; unknown names are refused.
 - **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt always shows the exact text sent.
-- **Unlock and garage-open always ask first.** Scenes can never include them.
+- **Optional confirm-first actions.** List any home actions (e.g. `unlock`, `open`) in
+  `[home] confirm_actions` to require a Pushcut tap. Empty by default: the ring only listens while
+  you hold the button, so what you say runs.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
 - **No double texts.** A send that times out is marked unknown and never retried automatically.
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.

@@ -169,7 +169,7 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 | **Claude Code per host** | "Ask Claude Code on the RackNerd VPS why the websites are down" | Headless `claude -p` locally or over SSH; Pushcut summary |
 | **Shopping list** | "Add milk and eggs to my shopping list" | One reminder per item in the Reminders list "Shopping list" |
 | **Remember** | "Remember I parked on level 3, row G" | A new note in the "Remember" folder |
-| **Scenes** | "Goodnight" (the entire transcript) | Fixed device actions; never unlock or garage open |
+| **Scenes** | "Goodnight" (the entire transcript) | Fixed device actions |
 | **Research** | "Research the best robot vacuum under $500" / "Research with DeepSeek…" | A note in the "Research" folder; Pushcut just says it's ready |
 
 - **Claude Code:** hosts and spoken names are in config; unknown hosts are refused; default is the
@@ -256,7 +256,7 @@ One device alias table, two backends:
 | Action | Behavior |
 | --- | --- |
 | Lights, fans, switches, "lock" | Run immediately, then notify |
-| "Unlock", garage "open" | **Always** need a Pushcut confirmation |
+| Actions in `[home] confirm_actions` | Need a Pushcut tap first. **Empty by default**: the ring only listens while you hold the button, so unlock and garage-open run as spoken |
 | Not recognized | Nothing happens; you're told what was heard |
 
 ---
@@ -290,7 +290,7 @@ question), with context we keep ourselves.
 | Message sent | "Sent to Terri: 'When will you be home?'" | — |
 | Weak recipient match | "Send to Terri: '…'?" | Send / Cancel |
 | Unknown recipient | "Didn't recognize 'harry', nothing sent" | — |
-| Unlock / open garage | "Unlock front door?" | Unlock / Cancel |
+| Confirm-first action (if configured) | "Unlock front door?" | Unlock / Cancel |
 | Model answer | Short answer | Open full answer |
 | Note / reminder / event | "Note created: Grocery ideas" | — |
 | Error | What failed and what was heard | — |
@@ -329,7 +329,7 @@ Every route starts in dry run until you've watched it behave.
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Cases 1–4 live; weak-match confirm works |
 | **3. Models** | OpenRouter routes, `profile.md`, follow-ups, web search | Answers arrive by Pushcut |
 | **4. Apple apps** | Notes, reminders, calendar live; EventKit location helper | Cases 5–7 work incl. "when I get home" |
-| **5. Home** | Aliases, Hubitat + HomeMCPBridge, unlock confirm | Case 8 through both backends |
+| **5. Home** | Aliases, Hubitat + HomeMCPBridge, optional confirm-first actions | Case 8 through both backends |
 | **6. General agent** | Pydantic AI + macos-mcp (no mail) | Unmatched commands handled or declined |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → questions agent → research → Claude Code per host → Focus (experimental) | Each live in order |
 
@@ -353,7 +353,7 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 | A misheard name texts the wrong person | Allowlist, tiers, confirmation on weak matches, receipts |
 | A timed-out send gets retried and double-texts | `unknown` sends are never re-sent automatically |
 | The on-device rewrite changes meaning | Greedy mode, fallback rules, `sends` tests, receipts; "tell" never rewritten |
-| HomeMCPBridge is young | Hubitat path for Z-Wave; unlock always confirmed |
+| HomeMCPBridge is young | Hubitat path for Z-Wave devices |
 | macos-mcp changes under opencode's npx cache | The router pins its own `mcp-macos@4.1.0` |
 
 ---

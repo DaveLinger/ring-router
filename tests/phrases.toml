@@ -333,14 +333,14 @@ say = "Unlock the front door"
 route = "home"
 extracted = "the front door"
 action = "unlock"
-confirm = true
+confirm = false
 
 [[case]]
 say = "Open the garage"
 route = "home"
 extracted = "the garage"
 action = "open"
-confirm = true
+confirm = false
 
 [[case]]
 say = "Goodnight"

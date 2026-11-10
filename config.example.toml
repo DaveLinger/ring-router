@@ -105,6 +105,13 @@ aliases = { }
 default_folder = "Notes"
 remember_folder = "Remember"
 
+# --------------------------------------------------------------------- home --
+
+[home]
+# Actions that need a Pushcut Send/Cancel tap before they run. Empty = everything runs as
+# spoken (the ring only listens while you hold the button). e.g. ["unlock", "open"]
+confirm_actions = []
+
 # -------------------------------------------------------------------- scenes --
 # Exact phrase only: the whole transcript must equal one of the phrases.
 
