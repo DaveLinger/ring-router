@@ -270,15 +270,20 @@ question), with context we keep ourselves.
 
 | Prefix | Family | Note |
 | --- | --- | --- |
-| ask/tell chatgpt, chat | OpenAI | model ID in config |
-| ask/tell claude | Anthropic | model ID in config |
-| ask/tell deepseek | DeepSeek | looser on some topics; own blind spots (Chinese politics) |
-| ask/tell qwen | Qwen | model ID in config |
+| ask/tell chatgpt, chat | OpenAI | `openai/gpt-6.1-terra` ($1 / $5 per M tokens) |
+| ask/tell claude | Anthropic | `anthropic/claude-sonnet-5.5` ($2 / $10) |
+| ask/tell deepseek | DeepSeek | `deepseek/deepseek-v4.1-flash` ($0.05 / $0.57); own blind spots (Chinese politics) |
+| ask/tell qwen | Qwen | `qwen/qwen3.8-flash` ($0.15 / $0.47) |
 
 - Your words are sent **verbatim** with a note that they're a speech transcript (no rewrite step).
 - **Why not your ChatGPT/Claude subscriptions:** there's no API to ChatGPT memory; Codex and `claude -p`
   don't carry consumer memory; headless billing is unclear.
-- **Context we build:** `profile.md` (facts about you), a ~10-minute follow-up window, OpenRouter web search, and a log.
+- **Context we build:** `profile.md` (facts about you, git-ignored), a 10-minute follow-up window per model
+  ("ask DeepSeek more about that" continues the thread), and OpenRouter's `web` plugin (3 results for
+  "ask", 8 for research; ~$0.005–0.007 per search).
+- **Answers:** the notification shows up to 300 characters. Longer answers, or any with sources, get a
+  **Full answer** button that opens `/answers/<id>` on the listener: a phone-friendly page with the
+  question, answer, sources, model and cost. The ID is an unguessable token.
 - **General agent:** open source, [Pydantic AI](https://ai.pydantic.dev/) on OpenRouter. Starts with no
   tools and gets only the listed macOS tools. Not the Claude Agent SDK for now (Claude-only, separate CLI
   process, ships shell/file tools); revisit if tasks grow long and multi-step.
@@ -329,7 +334,7 @@ Every route starts in dry run until you've watched it behave.
 | **0. Capture** | Ring setup, Tailscale Funnel, logging endpoint | Real requests verify; "Webhook only" confirmed |
 | **1. Skeleton** ✅ | Checks, store, parser, background jobs, notifier, simulator | Recordings echo back; tests pass |
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Cases 1–4 live; weak-match confirm works |
-| **3. Models** | OpenRouter routes, `profile.md`, follow-ups, web search | Answers arrive by Pushcut |
+| **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Answers arrive by Pushcut (needs API key to go live) |
 | **4. Apple apps** | Notes, reminders, calendar live; EventKit location helper | Cases 5–7 work incl. "when I get home" |
 | **5. Home** | Aliases, Hubitat + HomeMCPBridge, optional confirm-first actions | Case 8 through both backends |
 | **6. General agent** | Pydantic AI + macos-mcp (no mail) | Unmatched commands handled or declined |

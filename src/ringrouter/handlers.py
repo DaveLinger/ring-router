@@ -6,14 +6,14 @@ Dry-run is enforced here: in dry run a handler does everything up to the side ef
 
 from __future__ import annotations
 
-import json
 import logging
-import urllib.request
+import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import mcp
+from . import md, mcp
 from .fm import FM, checked_rewrite
+from .llm import LLMStore, OpenRouter, load_profile
 from .notify import Button, Notice
 from .prompts import prompt
 from .router import Route
@@ -41,11 +41,20 @@ class Context:
     delivery_id: str = ""
     public_url: str = ""                 # base URL for confirm buttons
     mcp_call: Callable = field(default=None)
+    llm: OpenRouter = field(default=None)
+    llm_store: LLMStore = field(default=None)
+    notes_writer: Callable = field(default=None)   # (title, html, folder) -> None
 
     def __post_init__(self):
         if self.mcp_call is None:
             cmd = self.cfg.section("macos_mcp").get("command", ["npx", "-y", "mcp-macos@4.1.0"])
             self.mcp_call = lambda name, args: mcp.call_tool(cmd, name, args)
+        if self.llm is None:
+            self.llm = OpenRouter(self.cfg.secret("openrouter_api_key"))
+        if self.llm_store is None:
+            self.llm_store = LLMStore(self.store)
+        if self.notes_writer is None:
+            self.notes_writer = applescript_note
 
     def dry(self, route: str) -> bool:
         return self.cfg.is_dry_run(route)
@@ -146,6 +155,29 @@ def resolve_handle(rc: dict, ctx: Context) -> str:
     if not (phones or emails):
         raise RuntimeError(f"no phone/email found for contact {rc['contact']!r}")
     return (phones or emails)[0]
+
+
+NOTE_SCRIPT = """on run argv
+  set noteTitle to item 1 of argv
+  set noteBody to item 2 of argv
+  set folderName to item 3 of argv
+  tell application "Notes"
+    if not (exists folder folderName) then make new folder with properties {name:folderName}
+    make new note at folder folderName with properties {name:noteTitle, body:noteBody}
+  end tell
+end run"""
+
+
+def applescript_note(title: str, body_html: str, folder: str) -> None:
+    """Create an Apple Note directly (no 2,000-character cap, unlike mcp-macos).
+
+    Text goes in as osascript arguments, never spliced into the script, so model output
+    can't inject AppleScript.
+    """
+    import html as _html  # noqa: PLC0415
+    full = f"<h1>{_html.escape(title)}</h1>\n{body_html}"
+    subprocess.run(["/usr/bin/osascript", "-e", NOTE_SCRIPT, title, full, folder],
+                   check=True, capture_output=True, text=True, timeout=60)
 
 
 # ------------------------------------------------------------- Apple apps ----
@@ -272,38 +304,70 @@ def h_scene(r: Route, ctx: Context) -> Result:
 
 # ---------------------------------------------------------------- models -------
 
-def openrouter_chat(ctx: Context, model_key: str, prompt: str, system: str = "") -> str:
-    m = ctx.cfg.raw["models"][model_key]
-    key = ctx.cfg.secret("openrouter_api_key")
-    if not key or "CHANGE-ME" in m["model"]:
-        raise RuntimeError(f"OpenRouter not configured for {m.get('display', model_key)} "
-                           "(set openrouter_api_key and the model ID)")
-    msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
-    req = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions", method="POST",
-                                 data=json.dumps({"model": m["model"], "messages": msgs}).encode(),
-                                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                                          "X-Title": "ring-router"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = json.load(resp)
-    return data["choices"][0]["message"]["content"].strip()
+def system_prompt(*names: str) -> str:
+    parts = [prompt("spoken_preamble"), load_profile()] + [prompt(n) for n in names]
+    return "\n\n".join(p for p in parts if p)
+
+
+def _short(text: str, limit: int) -> str:
+    t = " ".join(text.split())
+    return t if len(t) <= limit else t[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
 def h_llm(r: Route, ctx: Context) -> Result:
-    m = ctx.cfg.raw["models"][r.params["model"]]
+    """'Ask <model> ...': answer as a notification; full answer + sources on the answer page."""
+    key = r.params["model"]
+    m = ctx.cfg.raw["models"][key]
+    name = m.get("display", key)
+    oc = ctx.cfg.section("openrouter")
+    history = ctx.llm_store.history(key, int(oc.get("followup_window_s", 600)))
+    messages = ([{"role": "system", "content": system_prompt("llm_answer")}] + history
+                + [{"role": "user", "content": r.body}])
     try:
-        answer = openrouter_chat(ctx, r.params["model"], r.body, prompt("spoken_preamble") + "\n\n" + prompt("llm_answer"))
+        reply = ctx.llm.chat(m["model"], messages, web=bool(m.get("web_search", oc.get("web_search_ask", True))),
+                             web_results=int(oc.get("web_results_ask", 3)))
     except Exception as e:
-        ctx.notify(m.get("display", "Model"), f"Not asked: {e}")
+        ctx.notify(name, f"Not asked: {e}")
         return Result("failed", str(e))
-    ctx.notify(m.get("display", "Model"), answer)
-    return Result("done", f"{m.get('display')} answered ({len(answer)} chars)")
+    ctx.llm_store.remember(key, r.body, reply.text)
+    aid = ctx.llm_store.save_answer("ask", m["model"], r.body, reply)
+    limit = int(ctx.cfg.section("notify").get("max_chars", 300))
+    buttons = []
+    if len(reply.text) > limit or reply.citations:
+        buttons = [Button("Full answer", f"{ctx.public_url}/answers/{aid}")]
+    ctx.notify(name, _short(reply.text, limit), buttons)
+    follow = f", follow-up of {len(history) // 2}" if history else ""
+    cost = f", ${reply.cost:.4f}" if reply.cost is not None else ""
+    return Result("done", f"{name} answered ({len(reply.text)} chars, {len(reply.citations)} sources{follow}{cost})")
 
 
 def h_research(r: Route, ctx: Context) -> Result:
-    model = r.params.get("model")
-    msg = f"Research isn't built yet. Would research with {model}: “{r.body}” and save a note."
-    ctx.notify("Not done", msg)
-    return Result("dry_run", msg)
+    """'Research ...': web-backed write-up saved as an Apple Note; Pushcut only says it's ready."""
+    key = r.params.get("model") or ctx.cfg.section("research").get("default_model", "chatgpt")
+    m = ctx.cfg.raw["models"][key]
+    rc = ctx.cfg.section("research")
+    folder = rc.get("notes_folder", "Research")
+    messages = [{"role": "system", "content": system_prompt("research")}, {"role": "user", "content": r.body}]
+    try:
+        reply = ctx.llm.chat(m["model"], messages, web=True, web_results=int(rc.get("web_results", 8)))
+    except Exception as e:
+        ctx.notify("Research", f"Not done: {e}")
+        return Result("failed", str(e))
+    aid = ctx.llm_store.save_answer("research", m["model"], r.body, reply)
+    try:
+        title = ctx.fm.title(r.body)
+    except Exception:
+        title = _short(r.body, 60)
+    body = reply.text
+    if reply.citations and "sources" not in body.lower()[-2000:]:
+        body += "\n\n## Sources\n" + "\n".join(f"- [{c['title']}]({c['url']})" for c in reply.citations)
+    link = [Button("Read it", f"{ctx.public_url}/answers/{aid}")]
+    if ctx.dry("research"):
+        ctx.notify("Research ready (dry run)", f"“{title}” — note not saved", link)
+        return Result("dry_run", f"DRY RUN: would save note {title!r} in {folder!r} ({len(body)} chars)")
+    ctx.notes_writer(title, md.to_html(body), folder)
+    ctx.notify("Research ready", f"“{title}” in Notes › {folder}", link)
+    return Result("done", f"research note {title!r} in {folder!r} ({len(body)} chars)")
 
 
 def _stub(name: str) -> Callable:

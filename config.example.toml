@@ -12,6 +12,7 @@ timestamp_window_s = 300
 
 [notify]
 provider = "console"        # "console" (log only) or "pushcut"
+max_chars = 300             # longer answers get a "Full answer" button
 pushcut_notification = "Ring Router"   # name of the Pushcut notification to trigger
 
 [fm]
@@ -44,29 +45,36 @@ chat_id = "any;+;chat000000000000000000"   # Messages chat ID of the group
 sounds_like = ["the guys"]
 
 # -------------------------------------------------------------------- models --
-# Spoken names -> OpenRouter model IDs. Fill in the exact model IDs.
+# Spoken names -> OpenRouter model IDs (https://openrouter.ai/models).
+# web_search = false on a model turns off web search for its "ask" route.
 
 [models.chatgpt]
 display = "ChatGPT"
 spoken = ["chatgpt", "chat gpt", "chat g p t", "chat"]
-model = "openai/CHANGE-ME"
+model = "openai/gpt-6.1-terra"
 
 [models.claude]
 display = "Claude"
 spoken = ["claude", "clod", "cloud"]
-model = "anthropic/CHANGE-ME"
+model = "anthropic/claude-sonnet-5.5"
 
 [models.deepseek]
 display = "DeepSeek"
 spoken = ["deepseek", "deep seek"]
-model = "deepseek/CHANGE-ME"
+model = "deepseek/deepseek-v4.1-flash"
 
 [models.qwen]
 display = "Qwen"
 spoken = ["qwen", "quen", "kwen", "queen"]
-model = "qwen/CHANGE-ME"
+model = "qwen/qwen3.8-flash"
+
+[openrouter]
+web_search_ask = true        # "ask <model>" questions get live web results (~$0.005/question)
+web_results_ask = 3
+followup_window_s = 600      # a question to the same model within 10 min continues that conversation
 
 [research]
+web_results = 8
 default_model = "chatgpt"
 notes_folder = "Research"
 

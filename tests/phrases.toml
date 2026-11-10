@@ -156,6 +156,12 @@ extracted = "about the history of Tiananmen Square"
 model = "deepseek"
 
 [[case]]
+say = "Ask DeepSeek more about that"
+route = "llm"
+extracted = "more about that"
+model = "deepseek"
+
+[[case]]
 say = "Ask Claude how to descale an espresso machine"
 route = "llm"
 extracted = "how to descale an espresso machine"

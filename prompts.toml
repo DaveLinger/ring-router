@@ -57,7 +57,7 @@ text = "Extract the calendar event. If no end is given, leave end empty."
 # Sent after spoken_preamble.
 text = "Answer briefly; the reply is read as a phone notification."
 
-[research]   # DRAFT (openrouter, web search on) - "research ..." -> an Apple Note
+[research]   # LIVE (openrouter, web search on) - "research ..." -> an Apple Note
 # Sent after spoken_preamble.
 text = """
 You are writing a research note that will be saved to Apple Notes and read later on a phone \

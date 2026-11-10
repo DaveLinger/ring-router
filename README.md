@@ -72,7 +72,8 @@ shopping lists, and reading dates out of reminders and events.
 | *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on Tuesday at 15:00 |
 | *"Turn on the living room light"* | 💡 Hubitat or HomeKit |
 | *"Unlock the front door"* | 🔓 Unlocks it (or asks first, if you turn that on) |
-| *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Answer arrives as a notification |
+| *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Web-backed answer as a notification, full text + sources a tap away |
+| *"Ask DeepSeek more about that"* | 🤖 Continues the same conversation (within 10 minutes) |
 | *"Research the best robot vacuum under $500"* | 🔎 A research note in Apple Notes |
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
 | *"What's on my calendar Thursday?"* | 🧠 Read-only questions agent |
@@ -117,6 +118,7 @@ cp config.example.toml config.toml   # recipients, models, hosts, lists... (git-
 | `config.toml` | Recipients, models, hosts, lists, calendars, scenes, cancel phrases, dry-run flags | ❌ (copy from `config.example.toml`) |
 | `.env` | `RING_ROUTER_PATH_TOKEN`, `RING_ROUTER_SIGNING_SECRET`, API keys (mode 600) | ❌ (see `.env.example`) |
 | `prompts.toml` | **Every instruction given to a model**, marked LIVE or DRAFT | ✅ |
+| `profile.md` | Facts about you added to every model prompt (location for "near me", etc.) | ❌ (see `profile.example.md`) |
 | `tests/phrases.toml` | The answer key: phrases and how they must route and what they send | ✅ |
 
 Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_api_key`,
@@ -150,7 +152,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (114 tests)
+.venv/bin/pytest -q               # everything (125 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -168,11 +170,12 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 114 tests | ✅ Done |
+| Ring simulator, phrase answer key, 125 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
-| OpenRouter "ask a model" | 🟡 Written; needs an API key and model IDs |
-| Home, research, questions agent, general agent, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
+| Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Built and tested; needs your OpenRouter key to go live |
+| Research notes (web search → Apple Note) | ✅ Built and tested; note writing waits on the Notes permission |
+| Home, questions agent, general agent, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
 | Tailscale Funnel tunnel, launchd service | ⬜ Not started |
 
 See the **[build plan](docs/PLAN.md)** for the full design, decisions, and phase-by-phase roadmap.
@@ -191,6 +194,8 @@ ring-router/
 │   ├── cancel.py      # trailing cancel-phrase detection
 │   ├── handlers.py    # one handler per route; dry run enforced here
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
+│   ├── llm.py         # OpenRouter client, follow-up memory, answer store
+│   ├── md.py          # Markdown → HTML for the answer page and research notes
 │   ├── mcp.py         # minimal stdio MCP client for mcp-macos
 │   ├── notify.py      # console + Pushcut notifiers
 │   ├── store.py       # SQLite: deliveries + pending confirmations

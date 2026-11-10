@@ -15,10 +15,11 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import handlers, protocol
+from . import handlers, md, protocol
 from .config import Config
 from .fm import FM
 from .handlers import Context, Result
+from .llm import LLMStore, OpenRouter
 from .notify import make_notifier
 from .router import route
 from .store import Store
@@ -29,13 +30,16 @@ MAX_BODY = 20 * 1024 * 1024
 
 class App:
     def __init__(self, cfg: Config, *, store: Store | None = None, notifier=None, fm: FM | None = None,
-                 mcp_call=None, background: bool = True):
+                 mcp_call=None, background: bool = True, llm=None, notes_writer=None):
         self.cfg = cfg
         self.store = store or Store(cfg.state_dir / "state.db")
         self.notifier = notifier or make_notifier(cfg)
         f = cfg.section("fm")
         self.fm = fm or FM(f.get("path", "/usr/bin/fm"), f.get("timeout_s", 15))
         self.mcp_call = mcp_call
+        self.llm = llm or OpenRouter(cfg.secret("openrouter_api_key"))
+        self.llm_store = LLMStore(self.store)
+        self.notes_writer = notes_writer
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="job") if background else None
         self.public_url = cfg.server.get("public_url", f"http://{cfg.server.get('host')}:{cfg.server.get('port')}")
         for d in self.store.recover_interrupted():
@@ -43,7 +47,8 @@ class App:
 
     def ctx(self, delivery_id: str) -> Context:
         return Context(cfg=self.cfg, notifier=self.notifier, store=self.store, fm=self.fm,
-                       delivery_id=delivery_id, public_url=self.public_url, mcp_call=self.mcp_call)
+                       delivery_id=delivery_id, public_url=self.public_url, mcp_call=self.mcp_call,
+                       llm=self.llm, llm_store=self.llm_store, notes_writer=self.notes_writer)
 
     def process(self, delivery_id: str, transcript: str) -> tuple[int, str]:
         """Route + handle one authenticated, de-duplicated transcript."""
@@ -64,6 +69,22 @@ class App:
         res = handlers.run(r, ctx)
         self.store.set_state(ctx.delivery_id, res.state, summary=res.summary)
         log.info("delivery %s: (background) %s: %s", ctx.delivery_id[:8], res.state, res.summary)
+
+    def answer_page(self, aid: str) -> str | None:
+        a = self.llm_store.get_answer(aid)
+        if not a:
+            return None
+        import html as _h  # noqa: PLC0415
+        import time as _t  # noqa: PLC0415
+        when = _t.strftime("%b %-d, %Y %-I:%M %p", _t.localtime(a["created"]))
+        cost = f" \u00b7 ${a['cost']:.4f}" if a.get("cost") is not None else ""
+        src = ""
+        if a["citations"] and "sources" not in a["answer"].lower()[-2000:]:
+            src = "<h3>Sources</h3><ol>" + "".join(
+                f'<li><a href="{_h.escape(c["url"])}">{_h.escape(c["title"])}</a></li>' for c in a["citations"]) + "</ol>"
+        body = (f'<p class="meta">{_h.escape(a["model"])} \u00b7 {when}{cost}</p>'
+                f'<p class="q">\u201c{_h.escape(a["question"])}\u201d</p>{md.to_html(a["answer"])}{src}')
+        return md.page(a["question"][:80], body)
 
     def confirm(self, pid: str, answer: str) -> tuple[int, str]:
         if answer == "no":
@@ -108,6 +129,19 @@ def make_handler(app: App):
                 return self.reply(200, "ok")
             if p.startswith("/confirm/"):
                 return self._confirm(p)
+            if p.startswith("/answers/"):
+                page = app.answer_page(p.split("/", 2)[2])
+                if page is None:
+                    return self.reply(404, "not found")
+                data = page.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Robots-Tag", "noindex")
+                self.end_headers()
+                self.wfile.write(data)
+                return None
             return self.reply(404, "not found")
 
         def do_POST(self):
