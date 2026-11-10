@@ -42,7 +42,7 @@ GENERAL_TOOLS: dict[str, set[str]] = {
     "reminders_lists": READ,
     "notes_items": READ | {"create", "update"},
     "notes_folders": READ,
-    "contacts_people": READ,
+    "contacts_people": READ | {"create", "update"},   # add "delete" to allow removing contacts
     # never: mail_messages, messages_chat (the agent can't email or text anyone)
 }
 

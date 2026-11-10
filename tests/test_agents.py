@@ -117,7 +117,17 @@ def test_general_agent_live_executes_writes(cfg):
     assert executed == [("reminders_tasks", "create", "Renew registration")] and spec.calls[0]["result"] == "ok"
 
 
-def test_general_agent_blocks_contact_edits(cfg):
+def test_general_agent_creates_contact(cfg):
+    cfg.raw["server"]["dry_run"] = False
+    cfg.raw["server"]["dry_run_routes"] = []
+    mcp, executed = fake_macos()
+    model, _ = scripted(("contacts_people", {"action": "create", "search": "John Smith 555-1212"}))
+    text, spec = run_agent("general", "make a new contact named John Smith with phone number 555-1212",
+                           cfg, model=model, mcp_source=mcp)
+    assert executed == [("contacts_people", "create", "John Smith 555-1212")] and spec.calls[0]["result"] == "ok"
+
+
+def test_general_agent_blocks_contact_delete(cfg):
     cfg.raw["server"]["dry_run"] = False
     mcp, executed = fake_macos()
     model, _ = scripted(("contacts_people", {"action": "delete", "search": "Instinct"}))

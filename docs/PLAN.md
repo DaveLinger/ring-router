@@ -211,7 +211,7 @@ needed it replies with the command to say.
 | Calendar | read | read, create, update, delete |
 | Reminders | read | read, create, update, delete |
 | Notes | read | read, create, update |
-| Contacts | read | read |
+| Contacts | read | read, create, update |
 | Messages | read, only if `questions_read_messages = true` | none |
 | Mail | none | none |
 

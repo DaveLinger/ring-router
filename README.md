@@ -92,7 +92,7 @@ shopping lists, and reading dates out of reminders and events.
   you hold the button, so what you say runs.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
 - **No double texts.** A send that times out is marked unknown and never retried automatically.
-- **Agents can't text or email.** The general agent gets calendar, reminders and notes tools; the
+- **Agents can't text or email.** The general agent gets calendar, reminders, notes and contacts tools; the
   questions agent gets read-only tools. Allowed tools *and actions* are enforced in code, not just the prompt.
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.
 

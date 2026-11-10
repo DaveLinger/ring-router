@@ -443,6 +443,11 @@ extracted = "What's on my shopping list"
 
 # ------------------------------------------------------------------ agent --
 [[case]]
+say = "Make a new contact named John Smith with phone number 555-1212"
+route = "agent"
+extracted = "Make a new contact named John Smith with phone number 555-1212"
+
+[[case]]
 say = "Move my dentist appointment to next week"
 route = "agent"
 extracted = "Move my dentist appointment to next week"
