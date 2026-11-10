@@ -43,7 +43,7 @@ flowchart LR
 1. **The Pebble app** transcribes your recording and POSTs it, HMAC-signed, to one webhook.
 2. **ring-router** verifies the request (secret path, signature, timestamp, de-duplication).
 3. **The router** checks, in order: a cancel phrase → an exact scene → a fixed prefix → a refusal →
-   a question → the general agent. Fixed prefixes never touch a cloud LLM.
+   the general agent. Fixed prefixes never touch a cloud LLM.
 4. **The handler** acts, and **Pushcut** tells you what happened. It only asks first when a
    recipient name is a near-miss, or for actions you've chosen to confirm.
 
@@ -76,7 +76,8 @@ shopping lists, and reading dates out of reminders and events.
 | *"Ask DeepSeek more about that"* | 🤖 Continues the same conversation (within 10 minutes) |
 | *"Research the best robot vacuum under $500"* | 🔎 A research note in Apple Notes |
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
-| *"What's on my calendar Thursday?"* | 🧠 Read-only questions agent |
+| *"What's on my calendar Thursday?"* | 🧠 General agent reads your calendar |
+| *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 General agent searches the web; follow-ups keep the thread |
 | *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
 | *"Tell Harry I'm on my way"* | 🚫 Not on the allowlist, nothing sent |
 | *"Set a timer for 10 minutes"* | 🚫 Refused (timers aren't supported) |
@@ -92,8 +93,8 @@ shopping lists, and reading dates out of reminders and events.
   you hold the button, so what you say runs.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
 - **No double texts.** A send that times out is marked unknown and never retried automatically.
-- **Agents can't text or email.** The general agent gets calendar, reminders, notes and contacts tools; the
-  questions agent gets read-only tools. Allowed tools *and actions* are enforced in code, not just the prompt.
+- **The agent can't text or email.** It gets calendar, reminders, notes, contacts and web search; allowed
+  tools *and actions* are enforced in code, not just the prompt.
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.
 
 </details>
@@ -154,7 +155,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (143 tests)
+.venv/bin/pytest -q               # everything (144 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -172,12 +173,12 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 143 tests | ✅ Done |
+| Ring simulator, phrase answer key, 144 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Built and tested; needs your OpenRouter key to go live |
 | Research notes (web search → Apple Note) | ✅ Built and tested; note writing waits on the Notes permission |
-| General agent + read-only questions agent (Pydantic AI, macOS tools) | ✅ Built and tested; needs your OpenRouter key + macOS permissions to go live |
+| General agent (Pydantic AI): macOS tools, web search, follow-ups | ✅ Built; web answers live-tested; macOS tools wait on permission prompts |
 | Home, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
 | Tailscale Funnel tunnel, launchd service | ⬜ Not started |
 
@@ -198,7 +199,7 @@ ring-router/
 │   ├── handlers.py    # one handler per route; dry run enforced here
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
-│   ├── agents.py      # general + questions agents (Pydantic AI, tool/action guard)
+│   ├── agents.py      # the general agent (Pydantic AI, web search, tool/action guard)
 │   ├── md.py          # Markdown → HTML for the answer page and research notes
 │   ├── mcp.py         # minimal stdio MCP client for mcp-macos
 │   ├── notify.py      # console + Pushcut notifiers

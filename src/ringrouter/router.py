@@ -7,8 +7,7 @@ Order:
        claude code on <host> / research / ask <model> / note / remember /
        shopping list / reminder / calendar / home / messaging
   4. refusals (timers, alarms)       -> refuse
-  5. looks like a question           -> questions (read-only agent)
-  6. anything else                   -> agent (general agent)
+  5. anything else, question or not  -> agent (general agent)
 """
 
 from __future__ import annotations
@@ -71,10 +70,7 @@ def route(transcript: str, cfg) -> Route:
             return Route("refuse", t, params={"rule": key, "message": rule.get("message", "Not supported.")},
                          reason=f"refusal rule {key!r}")
 
-    # 5/6. agents ---------------------------------------------------------------
-    first = whole.split(" ", 1)[0]
-    if first in QUESTION_WORDS or t.rstrip().endswith("?"):
-        return Route("questions", t, body=t, reason="looks like a question (read-only agent)")
+    # 5. everything else, questions and requests alike ----------------------------
     return Route("agent", t, body=t, reason="no prefix matched (general agent)")
 
 

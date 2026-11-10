@@ -22,7 +22,7 @@ from .store import Store
 log = logging.getLogger(__name__)
 
 # Slow routes reply "accepted" to the Pebble app right away and finish in the background.
-SLOW_ROUTES = {"llm", "research", "questions", "agent", "claude_code"}
+SLOW_ROUTES = {"llm", "research", "agent", "claude_code"}
 
 
 @dataclass
@@ -383,10 +383,9 @@ def h_research(r: Route, ctx: Context) -> Result:
 
 
 def h_agent(r: Route, ctx: Context, kind: str) -> Result:
-    """Questions agent (read-only) or general agent (macOS tools, no mail/messages)."""
-    label = "Answer" if kind == "questions" else "Done"
+    """General agent: questions and requests (macOS tools without mail/sending, web search)."""
     window = int(ctx.cfg.section("openrouter").get("followup_window_s", 600))
-    history = ctx.llm_store.history(AGENT_THREAD, window)   # one thread shared by both agents
+    history = ctx.llm_store.history(AGENT_THREAD, window)
     try:
         text, spec = ctx.agent_runner(kind, r.body, ctx.cfg, history)
     except Exception as e:
@@ -397,6 +396,8 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
     calls = ", ".join(f"{c['tool']}.{c['action']}={c['result']}" for c in spec.calls) or "no tools"
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
     dry = any(c["result"] == "dry_run" for c in spec.calls)
+    wrote = any(c["action"] not in ("read", "search") and c["result"] in ("ok", "dry_run") for c in spec.calls)
+    label = "Done" if wrote else "Answer"
     buttons = []
     if len(md.plain(text)) > limit or spec.citations:
         model_id = ctx.cfg.section("agents").get("model", "anthropic/claude-sonnet-5.5")
@@ -407,7 +408,7 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
     return Result("dry_run" if dry else "done", f"{kind} agent: {_short(text, 120)} [{calls}{follow}]")
 
 
-AGENT_THREAD = "agent"   # follow-up thread key shared by the questions and general agents
+AGENT_THREAD = "agent"   # follow-up thread key for the general agent
 
 
 def _default_agent_runner(kind: str, request: str, cfg, history: list[dict] | None = None):
@@ -438,7 +439,6 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
     "scene": h_scene,
     "llm": h_llm,
     "research": h_research,
-    "questions": lambda r, ctx: h_agent(r, ctx, "questions"),
     "agent": lambda r, ctx: h_agent(r, ctx, "general"),
     "claude_code": _stub("Claude Code"),
 }

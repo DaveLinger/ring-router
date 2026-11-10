@@ -10,7 +10,7 @@ model. Answers and confirmations come back as **Pushcut** notifications.
 **Contents:** [Goals](#goals) · [How the Index sends data](#how-the-pebble-index-sends-data) ·
 [Architecture](#architecture) · [Routing & safety](#routing-and-recipient-safety) ·
 [Route catalog](#route-catalog) · [Additional routes](#additional-routes) ·
-[Questions agent](#questions-agent) · [Timers](#timers-and-alarms-refused) ·
+[General agent](#general-agent) · [Timers](#timers-and-alarms-refused) ·
 [On-device model](#on-device-apple-model) · [Home](#home-automation) ·
 [External models](#external-models) · [Responses](#responses-and-confirmations) ·
 [Security](#security-and-permissions) · [Phases](#build-phases) · [Open questions](#open-questions-and-risks) ·
@@ -82,9 +82,8 @@ flowchart LR
     router -- prefix match --> apple["Apple apps<br/><small>Notes · Reminders · Calendar</small>"]
     router -- prefix match --> home["Home<br/><small>Hubitat · HomeKit</small>"]
     router -- prefix match --> models["Models<br/><small>OpenRouter</small>"]
-    router -- question --> qa["Questions agent<br/><small>read-only</small>"]
-    router -- no match --> agent["General agent<br/><small>Pydantic AI + macos-mcp</small>"]
-    im & apple & home & models & qa & agent --> push["🔔 Pushcut<br/><small>results · answers · confirmations</small>"]
+    router -- no match --> agent["General agent<br/><small>Pydantic AI · macos-mcp · web search</small>"]
+    im & apple & home & models & agent --> push["🔔 Pushcut<br/><small>results · answers · confirmations</small>"]
     push -. Send / Cancel tap .-> checks
     fm -.->|"“ask” rewrite"| im
     fm -.->|"titles · item splits · dates"| apple
@@ -106,8 +105,7 @@ The router is a pure function of (transcript, config). Order:
 2. **Scene**: exact whole-transcript match only.
 3. **Fixed prefix routes**, most specific first.
 4. **Refusals** (timers, alarms).
-5. **Looks like a question** → read-only questions agent.
-6. **Anything else** → general agent.
+5. **Anything else**, question or request → general agent.
 
 ### Cancel detection
 
@@ -158,7 +156,7 @@ Names match by spelling **and** sound. "Hey X" / "X, …" is direct speech (sent
 | 7 | "Add dentist Tuesday at 3 to my calendar" | Extract title, time, calendar | on-device | macos-mcp `calendar_events` |
 | 8 | "Turn on the living room light" | Device alias + action | cheap | Hubitat Maker API or HomeMCPBridge |
 | 9 | "Ask ChatGPT / Claude / DeepSeek / Qwen …" | Prefix picks the model | yes | OpenRouter |
-| — | anything else | General agent | yes | Pydantic AI on OpenRouter + macos-mcp |
+| — | anything else (questions too) | General agent | yes | Pydantic AI on OpenRouter + macos-mcp + web search |
 
 Date extraction always includes today's date and time zone. The macos-mcp mail tools are never exposed.
 
@@ -182,49 +180,37 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 
 ---
 
-## Questions agent
+## General agent
 
-Questions about your own data go to a **read-only** agent: the same Pydantic AI setup as the general
-agent, with only read tools. Unclear cases go here first because it's the safe side; if an action is
-needed it replies with the command to say.
+**Every transcript that matches no fixed route goes to one general agent**, questions and requests
+alike. An earlier design split off a read-only "questions agent", but routing by sentence shape broke
+on natural speech: "Can you add the cheapest one to my calendar?" looks like a question and would have
+landed on an agent that couldn't write. One agent with a shared conversation thread avoids that.
 
-| Source | Tool | Example | Access needed |
-| --- | --- | --- | --- |
-| Calendar | `calendar_events` read | "What's on my calendar Thursday?" | Calendars (covers Google via `calsync`) |
-| Reminders | `reminders_tasks` read | "What's on my shopping list?" | Reminders |
-| Notes | `notes_items` search | "Where did I park?" | Automation (Notes) |
-| Contacts | `contacts_people` search | "What's Instinct's address?" | Contacts |
-| Messages | `messages_chat` read | "Did Terri text me?" | **Full Disk Access** |
-| Home status | Hubitat / HomeMCPBridge | "Is the garage closed?" | Hubitat token, HomeKit |
+| Tool | Allowed actions |
+| --- | --- |
+| Calendar | read, create, update, delete |
+| Reminders | read, create, update, delete |
+| Notes | read, create, update |
+| Contacts | read, create, update |
+| web_search | the agent writes its own query; one OpenRouter web-plugin call (`[agents] web_search_model`) |
+| Messages | read only, and only if `[agents] read_messages = true` (needs Full Disk Access) |
+| Mail | none |
 
-**Decisions to make**
+- Tools not in the table are invisible. Each mcp-macos tool takes an `action` argument, so a guard checks
+  every call and refuses anything not allowed. In dry run, writes return "DRY RUN: would…".
+- **Follow-ups:** the agent keeps one conversation thread (10-minute window), passed as message history,
+  so "Which of those is cheapest?" or "Why isn't the Tesla Model S Plaid on this list?" work naturally.
+- Instructions combine the spoken-transcript preamble, `profile.md`, `prompts.toml` and the current date/time.
+- Default model: `anthropic/claude-sonnet-5.5` (`[agents] model`), about 2–5¢ per request.
+- **Instinct:** the agent can't message anyone. If it can't finish a request (e.g. it needs someone else's
+  availability) it suggests a command, such as "ask Instinct to find a time for you and Terri".
 
-- [ ] Full Disk Access is granted per program, so use a small wrapper app or leave Messages out.
-- [ ] Private text goes to the model: use OpenRouter's no-training/no-retention provider settings; consider on-device only for Messages.
-- [ ] Cap how much is read per question (e.g. 7 days of messages, 50 notes).
+**Decisions still open**
+
+- [ ] Messages reading: needs Full Disk Access, granted per program, so a small wrapper app is safer.
+- [ ] Private text goes to the model: use OpenRouter's no-training/no-retention provider settings.
 - [ ] Gmail and Google Drive: in or out?
-
-**How the agents are fenced in (code, not prompt):**
-
-| | Questions agent | General agent |
-| --- | --- | --- |
-| Calendar | read | read, create, update, delete |
-| Reminders | read | read, create, update, delete |
-| Notes | read | read, create, update |
-| Contacts | read | read, create, update |
-| Messages | read, only if `questions_read_messages = true` | none |
-| Mail | none | none |
-
-Tools not in the table are invisible to the agent. Each mcp-macos tool takes an `action` argument,
-so a guard checks the action on every call and refuses anything not allowed. In dry run, the general
-agent's writes return "DRY RUN: would…" instead of running. Every call is logged with its result.
-Default model: `anthropic/claude-sonnet-5.5` (`[agents] model`), about 2–5¢ per request; agents pick and fill in tool calls themselves, so a strong model is worth it.
-
-**General agent and Instinct:** the general agent makes calendar changes itself with macos-mcp. It
-can't message anyone. If it can't finish a request (e.g. it needs someone else's availability) it says
-so and suggests a command, such as "ask Instinct to find a time for you and Terri".
-
----
 
 ## Timers and alarms: refused
 
@@ -338,7 +324,7 @@ Anyone who could fake this webhook could text your contacts or unlock your door.
 | Automation (Messages, Notes) | Sending iMessages, creating notes | 2 |
 | Reminders, Calendars | macos-mcp EventKit tools, location helper | 4 |
 | HomeKit | HomeMCPBridge | 5 |
-| Full Disk Access | Reading Messages (questions agent, tier 3b) | later, optional |
+| Full Disk Access | Reading Messages (general agent, tier 3b) | later, optional |
 
 ---
 
@@ -354,8 +340,8 @@ Every route starts in dry run until you've watched it behave.
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Answers arrive by Pushcut (needs API key to go live) |
 | **4. Apple apps** | Notes, reminders, calendar live; EventKit location helper | Cases 5–7 work incl. "when I get home" |
 | **5. Home** | Aliases, Hubitat + HomeMCPBridge, optional confirm-first actions | Case 8 through both backends |
-| **6. Agents** ✅ | Pydantic AI general agent + read-only questions agent over macos-mcp, tool/action guard | Unmatched commands handled or declined (needs key + permissions to go live) |
-| **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → questions agent → research → Claude Code per host → Focus (experimental) | Each live in order |
+| **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, tool/action guard | Unmatched commands handled or declined (needs key + permissions to go live) |
+| **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → research → Claude Code per host → Focus (experimental) | Each live in order |
 
 Tier 3b and the gesture mode switch come later, if real use shows they're worth it.
 

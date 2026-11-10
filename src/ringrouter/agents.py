@@ -1,8 +1,10 @@
-"""General agent and read-only questions agent (Pydantic AI on OpenRouter + mcp-macos tools).
+"""The general agent (Pydantic AI on OpenRouter + mcp-macos tools + web search).
+
+Every transcript that matches no fixed route comes here: questions and requests alike.
 
 Safety is enforced in code, not just in the prompt:
-  * Tool filter: only the tools listed for that agent are visible at all. Mail and Messages
-    sending are never listed, so the agents can't email or text anyone.
+  * Tool filter: only the tools listed below are visible at all. Mail and Messages sending are
+    never listed, so the agent can't email or text anyone.
   * Action guard: mcp-macos tools take an `action` argument (read/create/update/delete), so
     each tool also has an allowed-action set; anything else is refused before it reaches macOS.
   * Dry run: write actions return "DRY RUN: would ..." instead of executing.
@@ -26,17 +28,6 @@ os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")   # no startup banner in the
 READ = {"read", "search"}
 
 # tool -> allowed actions. Tools not listed are invisible to the agent.
-QUESTIONS_TOOLS: dict[str, set[str]] = {
-    "calendar_events": READ,
-    "calendar_calendars": READ,
-    "reminders_tasks": READ,
-    "reminders_lists": READ,
-    "notes_items": READ,
-    "notes_folders": READ,
-    "contacts_people": READ,
-    "messages_chat": READ,          # removed unless [agents] questions_read_messages = true
-}
-
 GENERAL_TOOLS: dict[str, set[str]] = {
     "calendar_events": READ | {"create", "update", "delete"},
     "calendar_calendars": READ,
@@ -45,13 +36,13 @@ GENERAL_TOOLS: dict[str, set[str]] = {
     "notes_items": READ | {"create", "update"},
     "notes_folders": READ,
     "contacts_people": READ | {"create", "update"},   # add "delete" to allow removing contacts
-    # never: mail_messages, messages_chat (the agent can't email or text anyone)
+    # never: mail_messages; messages_chat only for reading, and only if [agents] read_messages = true
 }
 
 
 @dataclass
 class AgentSpec:
-    name: str                       # "questions" | "general"
+    name: str                       # "general"
     prompt_name: str                # key in prompts.toml
     tools: dict[str, set[str]]
     dry_run: bool = True
@@ -60,13 +51,10 @@ class AgentSpec:
 
 
 def spec_for(kind: str, cfg) -> AgentSpec:
-    ac = cfg.section("agents")
-    if kind == "questions":
-        tools = dict(QUESTIONS_TOOLS)
-        if not ac.get("questions_read_messages", False):
-            tools.pop("messages_chat")
-        return AgentSpec("questions", "questions_agent", tools, dry_run=False)   # read-only: nothing to dry-run
-    return AgentSpec("general", "general_agent", dict(GENERAL_TOOLS), dry_run=cfg.is_dry_run("agent"))
+    tools = dict(GENERAL_TOOLS)
+    if cfg.section("agents").get("read_messages", False):
+        tools["messages_chat"] = READ          # read only: the agent still can't send messages
+    return AgentSpec("general", "general_agent", tools, dry_run=cfg.is_dry_run("agent"))
 
 
 def instructions(spec: AgentSpec) -> str:

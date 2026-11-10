@@ -415,30 +415,30 @@ say = "Set an alarm for 7"
 route = "refuse"
 rule = "timers"
 
-# --------------------------------------------------------------- questions --
+# ------------------------------------------- questions (general agent too) --
 [[case]]
 say = "What's on my calendar Thursday?"
-route = "questions"
+route = "agent"
 extracted = "What's on my calendar Thursday?"
 
 [[case]]
 say = "Did Terri text me?"
-route = "questions"
+route = "agent"
 extracted = "Did Terri text me?"
 
 [[case]]
 say = "Is the garage door closed?"
-route = "questions"
+route = "agent"
 extracted = "Is the garage door closed?"
 
 [[case]]
 say = "Where did I park?"
-route = "questions"
+route = "agent"
 extracted = "Where did I park?"
 
 [[case]]
 say = "What's on my shopping list"
-route = "questions"
+route = "agent"
 extracted = "What's on my shopping list"
 
 # ------------------------------------------------------------------ agent --
@@ -446,6 +446,15 @@ extracted = "What's on my shopping list"
 say = "Make a new contact named John Smith with phone number 555-1212"
 route = "agent"
 extracted = "Make a new contact named John Smith with phone number 555-1212"
+
+[[case]]
+say = "Can you add the cheapest one to my calendar?"
+route = "agent"
+extracted = "Can you add the cheapest one to my calendar?"
+
+[[case]]
+say = "Why isn't the Tesla Model S Plaid on this list?"
+route = "agent"
 
 [[case]]
 say = "Move my dentist appointment to next week"

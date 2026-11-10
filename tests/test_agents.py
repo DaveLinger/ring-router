@@ -1,4 +1,4 @@
-"""Phase 6: general + questions agents. Real Pydantic AI + MCP plumbing against a fake
+"""Phase 6: the general agent. Real Pydantic AI + MCP plumbing against a fake
 in-process mcp-macos server; a scripted FunctionModel stands in for the LLM."""
 
 import pytest
@@ -68,27 +68,22 @@ def scripted(*steps):
     return FunctionModel(fn), seen
 
 
-def test_questions_agent_sees_only_read_tools(cfg):
+def test_agent_answers_questions_from_read_tools(cfg):
     mcp, executed = fake_macos()
     model, seen = scripted(("calendar_events", {"action": "read"}))
-    text, spec = run_agent("questions", "What's on my calendar Tuesday?", cfg, model=model, mcp_source=mcp)
+    text, spec = run_agent("general", "What's on my calendar Tuesday?", cfg, model=model, mcp_source=mcp)
     assert seen["tools"] == ["calendar_events", "contacts_people", "reminders_tasks", "web_search"]  # no mail/messages
     assert executed == [("calendar_events", "read", "")] and "Dentist" in text
 
 
-def test_questions_agent_cannot_write(cfg):
+def test_agent_messages_read_opt_in_but_never_send(cfg):
+    cfg.raw["server"]["dry_run"] = False
+    cfg.raw.setdefault("agents", {})["read_messages"] = True
     mcp, executed = fake_macos()
-    model, _ = scripted(("calendar_events", {"action": "delete", "id": "ev1"}))
-    text, spec = run_agent("questions", "Delete my dentist appointment", cfg, model=model, mcp_source=mcp)
-    assert executed == [] and spec.calls[0]["result"] == "blocked" and "Not allowed" in text
-
-
-def test_questions_agent_messages_opt_in(cfg):
-    cfg.raw.setdefault("agents", {})["questions_read_messages"] = True
-    mcp, _ = fake_macos()
-    model, seen = scripted()
-    run_agent("questions", "Did Terri text me?", cfg, model=model, mcp_source=mcp)
+    model, seen = scripted(("messages_chat", {"action": "create", "text": "hi", "to": "+1555"}))
+    text, spec = run_agent("general", "Text Bob hi", cfg, model=model, mcp_source=mcp)
     assert "messages_chat" in seen["tools"] and "mail_messages" not in seen["tools"]
+    assert executed == [] and spec.calls[0]["result"] == "blocked"
 
 
 def test_general_agent_has_no_mail_or_messages(cfg):
@@ -147,7 +142,7 @@ def test_handler_notifies_and_reports_calls(cfg, fake_fm):
     model, _ = scripted(("calendar_events", {"action": "read"}))
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   agent_runner=lambda kind, req, c, h: run_agent(kind, req, c, history=h, model=model, mcp_source=mcp))
-    res = h_agent(route("What's on my calendar Thursday?", cfg), ctx, "questions")
+    res = h_agent(route("What's on my calendar Thursday?", cfg), ctx, "general")
     assert res.state == "done" and "calendar_events.read=ok" in res.summary
     assert ctx.notifier.sent[-1].title == "Answer" and "Dentist" in ctx.notifier.sent[-1].text
 
@@ -167,7 +162,7 @@ def test_agent_web_search_tool_and_citations(cfg):
         return "China One, 4218 MacCorkle Ave SE, 4.2 stars", [{"title": "Yelp", "url": "https://yelp.example"}]
 
     model, _ = scripted(("web_search", {"query": "best Chinese restaurant Charleston WV"}))
-    text, spec = run_agent("questions", "What's the best Chinese restaurant in Charleston?", cfg,
+    text, spec = run_agent("general", "What's the best Chinese restaurant in Charleston?", cfg,
                            model=model, mcp_source=mcp, searcher=searcher)
     assert queries == ["best Chinese restaurant Charleston WV"] and executed == []
     assert "China One" in text and spec.citations == [{"title": "Yelp", "url": "https://yelp.example"}]
@@ -183,7 +178,7 @@ def test_agent_followup_history_is_passed(cfg):
 
     history = [{"role": "user", "content": "What's the best Chinese restaurant in Charleston?"},
                {"role": "assistant", "content": "China One, Bamboo Garden, China Max."}]
-    text, _ = run_agent("questions", "Which of those is cheapest?", cfg, history=history,
+    text, _ = run_agent("general", "Which of those is cheapest?", cfg, history=history,
                         model=FunctionModel(fn), mcp_source=mcp, searcher=lambda q: ("", []))
     from pydantic_ai.messages import UserPromptPart
     texts = [str(p.content) for m in seen_msgs[0] for p in m.parts if isinstance(p, (UserPromptPart, TextPart))]
@@ -191,8 +186,8 @@ def test_agent_followup_history_is_passed(cfg):
                      "Which of those is cheapest?"]
 
 
-def test_handler_shares_one_thread_across_agents(cfg, fake_fm):
-    """Questions -> general agent within the window: the second sees the first exchange."""
+def test_handler_followup_thread(cfg, fake_fm):
+    """A question then a request within the window: the second sees the first exchange."""
     seen = []
 
     def runner(kind, req, c, history):
@@ -201,10 +196,10 @@ def test_handler_shares_one_thread_across_agents(cfg, fake_fm):
 
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   agent_runner=runner)
-    h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "questions")
+    h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "general")
     h_agent(route("Add dinner at the cheapest one Friday at 7 to my calendar please", cfg), ctx, "general")
-    assert seen[0] == ("questions", [])
-    assert seen[1] == ("general", ["What's the best Chinese restaurant in Charleston?", "questions reply"])
+    assert seen[0] == ("general", [])
+    assert seen[1] == ("general", ["What's the best Chinese restaurant in Charleston?", "general reply"])
 
 
 def test_handler_full_answer_button_when_sources(cfg, fake_fm):
@@ -215,6 +210,6 @@ def test_handler_full_answer_button_when_sources(cfg, fake_fm):
 
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   public_url="http://t", agent_runner=runner)
-    h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "questions")
+    h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "general")
     n = ctx.notifier.sent[-1]
     assert n.buttons and "/answers/" in n.buttons[0].url
