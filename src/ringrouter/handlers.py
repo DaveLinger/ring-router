@@ -13,7 +13,7 @@ from typing import Callable
 
 from . import md, mcp
 from .fm import FM, checked_rewrite
-from .llm import LLMStore, OpenRouter, load_profile
+from .llm import LLMStore, OpenRouter, Reply, load_profile
 from .notify import Button, Notice
 from .prompts import prompt
 from .router import Route
@@ -44,7 +44,7 @@ class Context:
     llm: OpenRouter = field(default=None)
     llm_store: LLMStore = field(default=None)
     notes_writer: Callable = field(default=None)   # (title, html, folder) -> None
-    agent_runner: Callable = field(default=None)   # (kind, request, cfg) -> (text, AgentSpec)
+    agent_runner: Callable = field(default=None)   # (kind, request, cfg, history) -> (text, AgentSpec)
 
     def __post_init__(self):
         if self.mcp_call is None:
@@ -385,23 +385,34 @@ def h_research(r: Route, ctx: Context) -> Result:
 def h_agent(r: Route, ctx: Context, kind: str) -> Result:
     """Questions agent (read-only) or general agent (macOS tools, no mail/messages)."""
     label = "Answer" if kind == "questions" else "Done"
+    window = int(ctx.cfg.section("openrouter").get("followup_window_s", 600))
+    history = ctx.llm_store.history(AGENT_THREAD, window)   # one thread shared by both agents
     try:
-        text, spec = ctx.agent_runner(kind, r.body, ctx.cfg)
+        text, spec = ctx.agent_runner(kind, r.body, ctx.cfg, history)
     except Exception as e:
         log.exception("%s agent failed", kind)
         ctx.notify("Not done", f"{e}. Heard: \u201c{r.transcript}\u201d")
         return Result("failed", f"{kind} agent error: {e}")
+    ctx.llm_store.remember(AGENT_THREAD, r.body, text)
     calls = ", ".join(f"{c['tool']}.{c['action']}={c['result']}" for c in spec.calls) or "no tools"
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
-    title = label + (" (dry run)" if spec.dry_run and any(c["result"] == "dry_run" for c in spec.calls) else "")
-    ctx.notify(title, _short(text, limit))
-    state = "dry_run" if any(c["result"] == "dry_run" for c in spec.calls) else "done"
-    return Result(state, f"{kind} agent: {_short(text, 120)} [{calls}]")
+    dry = any(c["result"] == "dry_run" for c in spec.calls)
+    buttons = []
+    if len(md.plain(text)) > limit or spec.citations:
+        model_id = ctx.cfg.section("agents").get("model", "anthropic/claude-sonnet-5.5")
+        aid = ctx.llm_store.save_answer(kind, model_id, r.body, Reply(text, spec.citations, model_id))
+        buttons = [Button("Full answer", f"{ctx.public_url}/answers/{aid}")]
+    ctx.notify(label + (" (dry run)" if dry else ""), _short(text, limit), buttons)
+    follow = f", follow-up of {len(history) // 2}" if history else ""
+    return Result("dry_run" if dry else "done", f"{kind} agent: {_short(text, 120)} [{calls}{follow}]")
 
 
-def _default_agent_runner(kind: str, request: str, cfg):
+AGENT_THREAD = "agent"   # follow-up thread key shared by the questions and general agents
+
+
+def _default_agent_runner(kind: str, request: str, cfg, history: list[dict] | None = None):
     from .agents import run_agent  # noqa: PLC0415  (pydantic-ai imported only when an agent runs)
-    return run_agent(kind, request, cfg)
+    return run_agent(kind, request, cfg, history=history)
 
 
 def _stub(name: str) -> Callable:

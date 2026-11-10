@@ -56,6 +56,7 @@ class AgentSpec:
     tools: dict[str, set[str]]
     dry_run: bool = True
     calls: list[dict] = field(default_factory=list)   # audit log of tool calls this run
+    citations: list[dict] = field(default_factory=list)   # sources found by web_search this run
 
 
 def spec_for(kind: str, cfg) -> AgentSpec:
@@ -125,13 +126,61 @@ def default_mcp_source(cfg):
     return StdioTransport(command=cmd[0], args=list(cmd[1:]))
 
 
-def run_agent(kind: str, request: str, cfg, *, model=None, mcp_source=None) -> tuple[str, AgentSpec]:
-    """Run one agent request synchronously. Returns (reply text, spec with the call audit log)."""
-    from pydantic_ai import Agent  # noqa: PLC0415
+def default_searcher(cfg) -> Callable[[str], tuple[str, list[dict]]]:
+    """web_search backend: one OpenRouter call with the web plugin, summarised with sources."""
+    from .llm import OpenRouter  # noqa: PLC0415
+
+    ac = cfg.section("agents")
+    client = OpenRouter(cfg.secret("openrouter_api_key"))
+    model_id = ac.get("web_search_model", "deepseek/deepseek-v4.1-flash")
+
+    def search(query: str) -> tuple[str, list[dict]]:
+        reply = client.chat(model_id, [
+            {"role": "system", "content": "Answer the search query factually and concisely from current web "
+                                          "results. Include specifics (names, addresses, prices, dates)."},
+            {"role": "user", "content": query}], web=True, web_results=int(ac.get("web_results", 5)))
+        return reply.text, reply.citations
+
+    return search
+
+
+def history_messages(history: list[dict]) -> list:
+    """Plain {'role','content'} turns -> Pydantic AI message history."""
+    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart  # noqa: PLC0415
+
+    out = []
+    for m in history:
+        if m["role"] == "user":
+            out.append(ModelRequest(parts=[UserPromptPart(m["content"])]))
+        else:
+            out.append(ModelResponse(parts=[TextPart(m["content"])]))
+    return out
+
+
+def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None, model=None,
+              mcp_source=None, searcher=None) -> tuple[str, AgentSpec]:
+    """Run one agent request synchronously. Returns (reply text, spec with the call audit log).
+
+    history: earlier {'role','content'} turns of the agent conversation (follow-ups).
+    """
+    from pydantic_ai import Agent, Tool  # noqa: PLC0415
 
     spec = spec_for(kind, cfg)
+    search = searcher or default_searcher(cfg)
+
+    def web_search(query: str) -> str:
+        """Search the web for current information (places, prices, news, facts). Write a specific,
+        self-contained query, e.g. 'cheapest Chinese restaurant Charleston WV'."""
+        text, cites = search(query)
+        spec.calls.append({"tool": "web_search", "action": "read", "args": {"query": query}, "result": "ok"})
+        for c in cites:
+            if c["url"] not in {x["url"] for x in spec.citations}:
+                spec.citations.append(c)
+        sources = "\n".join(f"- {c['title']}: {c['url']}" for c in cites)
+        return text + (f"\n\nSources:\n{sources}" if sources else "")
+
     agent = Agent(model or default_model(cfg), instructions=instructions(spec),
                   toolsets=[build_toolset(spec, mcp_source or default_mcp_source(cfg))],
-                  retries=2, tool_timeout=60)
-    result = agent.run_sync(request)
+                  tools=[Tool(web_search)], retries=2, tool_timeout=90)
+    result = agent.run_sync(request, message_history=history_messages(history or []) or None)
     return str(result.output).strip(), spec

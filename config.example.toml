@@ -77,6 +77,8 @@ followup_window_s = 600      # a question to the same model within 10 min contin
 # Pydantic AI agents for unmatched commands. Needs a model that's good at tool calls.
 model = "anthropic/claude-sonnet-5.5"
 questions_read_messages = false   # let the questions agent read Messages (needs Full Disk Access)
+web_search_model = "deepseek/deepseek-v4.1-flash"   # backs the agents' web_search tool
+web_results = 5
 
 [research]
 web_results = 8

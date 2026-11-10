@@ -72,7 +72,7 @@ def test_questions_agent_sees_only_read_tools(cfg):
     mcp, executed = fake_macos()
     model, seen = scripted(("calendar_events", {"action": "read"}))
     text, spec = run_agent("questions", "What's on my calendar Tuesday?", cfg, model=model, mcp_source=mcp)
-    assert seen["tools"] == ["calendar_events", "contacts_people", "reminders_tasks"]   # no mail/messages
+    assert seen["tools"] == ["calendar_events", "contacts_people", "reminders_tasks", "web_search"]  # no mail/messages
     assert executed == [("calendar_events", "read", "")] and "Dentist" in text
 
 
@@ -146,7 +146,7 @@ def test_handler_notifies_and_reports_calls(cfg, fake_fm):
     mcp, _ = fake_macos()
     model, _ = scripted(("calendar_events", {"action": "read"}))
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
-                  agent_runner=lambda kind, req, c: run_agent(kind, req, c, model=model, mcp_source=mcp))
+                  agent_runner=lambda kind, req, c, h: run_agent(kind, req, c, history=h, model=model, mcp_source=mcp))
     res = h_agent(route("What's on my calendar Thursday?", cfg), ctx, "questions")
     assert res.state == "done" and "calendar_events.read=ok" in res.summary
     assert ctx.notifier.sent[-1].title == "Answer" and "Dentist" in ctx.notifier.sent[-1].text
@@ -156,3 +156,65 @@ def test_handler_reports_missing_key(cfg, fake_fm):
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm)
     res = h_agent(route("Move my dentist appointment to next week", cfg), ctx, "general")
     assert res.state == "failed" and "API key" in ctx.notifier.sent[-1].text
+
+
+def test_agent_web_search_tool_and_citations(cfg):
+    mcp, executed = fake_macos()
+    queries = []
+
+    def searcher(q):
+        queries.append(q)
+        return "China One, 4218 MacCorkle Ave SE, 4.2 stars", [{"title": "Yelp", "url": "https://yelp.example"}]
+
+    model, _ = scripted(("web_search", {"query": "best Chinese restaurant Charleston WV"}))
+    text, spec = run_agent("questions", "What's the best Chinese restaurant in Charleston?", cfg,
+                           model=model, mcp_source=mcp, searcher=searcher)
+    assert queries == ["best Chinese restaurant Charleston WV"] and executed == []
+    assert "China One" in text and spec.citations == [{"title": "Yelp", "url": "https://yelp.example"}]
+
+
+def test_agent_followup_history_is_passed(cfg):
+    mcp, _ = fake_macos()
+    seen_msgs = []
+
+    def fn(messages, info):
+        seen_msgs.append(messages)
+        return ModelResponse(parts=[TextPart("China Max is cheapest.")])
+
+    history = [{"role": "user", "content": "What's the best Chinese restaurant in Charleston?"},
+               {"role": "assistant", "content": "China One, Bamboo Garden, China Max."}]
+    text, _ = run_agent("questions", "Which of those is cheapest?", cfg, history=history,
+                        model=FunctionModel(fn), mcp_source=mcp, searcher=lambda q: ("", []))
+    from pydantic_ai.messages import UserPromptPart
+    texts = [str(p.content) for m in seen_msgs[0] for p in m.parts if isinstance(p, (UserPromptPart, TextPart))]
+    assert texts == ["What's the best Chinese restaurant in Charleston?", "China One, Bamboo Garden, China Max.",
+                     "Which of those is cheapest?"]
+
+
+def test_handler_shares_one_thread_across_agents(cfg, fake_fm):
+    """Questions -> general agent within the window: the second sees the first exchange."""
+    seen = []
+
+    def runner(kind, req, c, history):
+        seen.append((kind, [m["content"] for m in history]))
+        return f"{kind} reply", type("S", (), {"calls": [], "citations": [], "dry_run": True})()
+
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
+                  agent_runner=runner)
+    h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "questions")
+    h_agent(route("Add dinner at the cheapest one Friday at 7 to my calendar please", cfg), ctx, "general")
+    assert seen[0] == ("questions", [])
+    assert seen[1] == ("general", ["What's the best Chinese restaurant in Charleston?", "questions reply"])
+
+
+def test_handler_full_answer_button_when_sources(cfg, fake_fm):
+    def runner(kind, req, c, history):
+        spec = type("S", (), {"calls": [], "dry_run": False,
+                              "citations": [{"title": "Yelp", "url": "https://yelp.example"}]})()
+        return "China One.", spec
+
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
+                  public_url="http://t", agent_runner=runner)
+    h_agent(route("What's the best Chinese restaurant in Charleston?", cfg), ctx, "questions")
+    n = ctx.notifier.sent[-1]
+    assert n.buttons and "/answers/" in n.buttons[0].url
