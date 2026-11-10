@@ -5,6 +5,7 @@
 [server]
 host = "127.0.0.1"          # never bind publicly; the tunnel forwards to this
 port = 8642
+public_url = "https://your-mac.your-tailnet.ts.net"   # Tailscale Funnel address: buttons and answer pages use it
 dry_run = true              # global: nothing is sent or changed while true
 dry_run_routes = []         # routes kept in dry run even when dry_run = false
 state_dir = "~/Library/Application Support/ring-router"
