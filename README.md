@@ -33,6 +33,11 @@ flowchart LR
     D --> H["🤖 ChatGPT · Claude · DeepSeek · Qwen"]
     D --> I["🧠 Agents"]
     E & F & G & H & I --> J["🔔 Pushcut<br/><small>receipts, answers, confirms</small>"]
+    FM -.->|"“ask” → direct question"| E
+    FM -.->|"titles · item splits · dates"| F
+    FM["🍎 Apple Intelligence<br/><b>on-device model</b><br/><small>/usr/bin/fm · free · offline · ~0.35s</small>"]
+    classDef apple fill:#f2f2f7,stroke:#8e8e93,stroke-width:2px,color:#1c1c1e
+    class FM apple
 ```
 
 1. **The Pebble app** transcribes your recording and POSTs it, HMAC-signed, to one webhook.

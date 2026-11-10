@@ -84,6 +84,11 @@ flowchart LR
     router -- no match --> agent["General agent<br/><small>Pydantic AI + macos-mcp</small>"]
     im & apple & home & models & qa & agent --> push["🔔 Pushcut<br/><small>results · answers · confirmations</small>"]
     push -. Send / Cancel tap .-> checks
+    fm -.->|"“ask” rewrite"| im
+    fm -.->|"titles · item splits · dates"| apple
+    fm["🍎 Apple Intelligence<br/><b>on-device model</b><br/><small>/usr/bin/fm · greedy · offline</small>"]
+    classDef applefm fill:#f2f2f7,stroke:#8e8e93,stroke-width:2px,color:#1c1c1e
+    class fm applefm
 ```
 
 Fast fixed routes reply to the Pebble app with their real result; slow routes reply "accepted".
