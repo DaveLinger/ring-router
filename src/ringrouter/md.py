@@ -70,6 +70,20 @@ def to_html(md: str) -> str:
     return "\n".join(out)
 
 
+def plain(text: str) -> str:
+    """Markdown -> plain text for notifications: links become their label, formatting removed."""
+    domain = re.compile(r"^[\w.-]+\.[a-z]{2,}$", re.I)
+    t = _LINK.sub(lambda m: "" if domain.match(m.group(1)) else m.group(1), text)   # drop "[site.com](...)" cites
+    t = re.sub(r"\(\s*(\[?[\w.-]+\.[a-z]{2,}\]?)?\s*\)", "", t)    # leftover "(site.com)" / "()" citations
+    t = re.sub(r"^#{1,6}\s*", "", t, flags=re.M)
+    t = re.sub(r"\*\*([^*]+)\*\*|__([^_]+)__", lambda m: m.group(1) or m.group(2), t)
+    t = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"\1", t)
+    t = re.sub(r"`([^`]+)`", r"\1", t)
+    t = re.sub(r"^\s*[-*+]\s+", "\u2022 ", t, flags=re.M)
+    t = re.sub(r"[ \t]+", " ", t)
+    return re.sub(r" +([.,;:!?])", r"\1", t).strip()
+
+
 def page(title: str, body_html: str) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(title)}</title>

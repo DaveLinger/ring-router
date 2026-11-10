@@ -37,6 +37,10 @@ class FM:
         who = f"{recipient} (group chat)" if group else recipient
         return self.respond(f"Recipient: {who}. Indirect question: {question}", prompt("ask_rewrite"))
 
+    def standalone(self, previous_question: str, followup: str) -> str:
+        return self.respond(f"Previous question: {previous_question}\nFollow-up: {followup}",
+                            prompt("followup_rewrite"))
+
     def title(self, body: str) -> str:
         return self.respond(body, prompt("note_title"))
 

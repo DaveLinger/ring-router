@@ -52,7 +52,7 @@ def test_followup_within_window_carries_history(ctx, cfg):
     msgs = ctx.llm.calls[-1]["messages"]
     assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
     assert msgs[1]["content"] == "what's the best Chinese restaurant near me"
-    assert msgs[-1]["content"] == "more about that"
+    assert msgs[-1]["content"] == "more about that (re: what's the best Chinese restaurant near me)"
     # a different model doesn't see DeepSeek's thread
     h_llm(route("Ask Qwen more about that", cfg), ctx)
     assert [m["role"] for m in ctx.llm.calls[-1]["messages"]] == ["system", "user"]
@@ -100,6 +100,18 @@ def test_research_live_writes_note_with_sources(ctx, cfg):
     title, html, folder = ctx.notes[-1]
     assert title == "Test title" and folder == "Research"
     assert "<h3>Picks</h3>" in html and "<b>X</b>" in html and 'href="https://r.example"' in html
+
+
+def test_notification_text_is_plain(ctx, cfg):
+    ctx.llm = FakeLLM("The **Burj Khalifa** is tallest. ([guinnessworldrecords.com](https://g.example))")
+    h_llm(route("Ask DeepSeek what's the tallest building", cfg), ctx)
+    assert ctx.notifier.sent[-1].text == "The Burj Khalifa is tallest."
+
+
+def test_plain_drops_bare_domain_citations():
+    from ringrouter.md import plain
+    assert plain("Tops at 4.2/5. [stacker.com](https://s.example) Runners-up . **A**") == "Tops at 4.2/5. Runners-up. A"
+    assert plain("See [the review](https://r.example).") == "See the review."
 
 
 def test_markdown_to_html():

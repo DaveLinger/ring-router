@@ -295,7 +295,8 @@ question), with context we keep ourselves.
 - **Why not your ChatGPT/Claude subscriptions:** there's no API to ChatGPT memory; Codex and `claude -p`
   don't carry consumer memory; headless billing is unclear.
 - **Context we build:** `profile.md` (facts about you, git-ignored), a 10-minute follow-up window per model
-  ("ask DeepSeek more about that" continues the thread), and OpenRouter's `web` plugin (3 results for
+  ("ask DeepSeek more about that" continues the thread; the on-device model first rewrites a
+  follow-up into a standalone question so the web search finds the right thing), and OpenRouter's `web` plugin (3 results for
   "ask", 8 for research; ~$0.005–0.007 per search).
 - **Answers:** the notification shows up to 300 characters. Longer answers, or any with sources, get a
   **Full answer** button that opens `/answers/<id>` on the listener: a phone-friendly page with the

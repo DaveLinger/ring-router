@@ -53,6 +53,19 @@ text = "Extract the calendar event. If no end is given, leave end empty."
 
 # ---------------------------------------------------------------- models --
 
+[followup_rewrite]   # LIVE (fm) - "which of those is cheapest" -> a standalone question
+# The prompt sent is the previous question and the follow-up. The rewrite is what gets
+# web-searched and sent; the earlier conversation is still included for context.
+text = """
+Rewrite the follow-up as a complete, standalone question that makes sense without the earlier \
+conversation, by filling in what words like 'those', 'that', 'it' or 'there' refer to. Keep the \
+speaker's intent and wording otherwise. If it is already standalone, return it unchanged. \
+Output only the question.
+Example:
+Previous question: what's the best Chinese restaurant in Charleston West Virginia
+Follow-up: which of those is cheapest
+-> Which of the best Chinese restaurants in Charleston, West Virginia is cheapest?"""
+
 [llm_answer]   # LIVE (openrouter) - "ask ChatGPT/Claude/DeepSeek/Qwen ..." -> Pushcut
 # Sent after spoken_preamble.
 text = "Answer briefly; the reply is read as a phone notification."

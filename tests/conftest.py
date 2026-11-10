@@ -13,6 +13,10 @@ class FakeFM:
         self.calls.append(("rewrite", recipient, question))
         return "When will you be home?"
 
+    def standalone(self, previous_question, followup):
+        self.calls.append(("standalone", previous_question, followup))
+        return f"{followup} (re: {previous_question})"
+
     def title(self, body):
         self.calls.append(("title", body))
         return "Test title"

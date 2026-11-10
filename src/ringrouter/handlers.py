@@ -313,7 +313,7 @@ def system_prompt(*names: str) -> str:
 
 
 def _short(text: str, limit: int) -> str:
-    t = " ".join(text.split())
+    t = " ".join(md.plain(text).split())
     return t if len(t) <= limit else t[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
@@ -324,16 +324,25 @@ def h_llm(r: Route, ctx: Context) -> Result:
     name = m.get("display", key)
     oc = ctx.cfg.section("openrouter")
     history = ctx.llm_store.history(key, int(oc.get("followup_window_s", 600)))
+    question = r.body
+    if history:   # make the follow-up standalone so the web search has something real to find
+        prev = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+        try:
+            rewritten = ctx.fm.standalone(prev, r.body).strip().strip('"')
+            if rewritten and len(rewritten) < 4 * max(len(r.body), 40):
+                question = rewritten
+        except Exception as e:
+            log.warning("follow-up rewrite failed, sending as spoken: %s", e)
     messages = ([{"role": "system", "content": system_prompt("llm_answer")}] + history
-                + [{"role": "user", "content": r.body}])
+                + [{"role": "user", "content": question}])
     try:
         reply = ctx.llm.chat(m["model"], messages, web=bool(m.get("web_search", oc.get("web_search_ask", True))),
                              web_results=int(oc.get("web_results_ask", 3)))
     except Exception as e:
         ctx.notify(name, f"Not asked: {e}")
         return Result("failed", str(e))
-    ctx.llm_store.remember(key, r.body, reply.text)
-    aid = ctx.llm_store.save_answer("ask", m["model"], r.body, reply)
+    ctx.llm_store.remember(key, question, reply.text)
+    aid = ctx.llm_store.save_answer("ask", m["model"], question, reply)
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
     buttons = []
     if len(reply.text) > limit or reply.citations:

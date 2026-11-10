@@ -154,7 +154,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (135 tests)
+.venv/bin/pytest -q               # everything (139 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -172,7 +172,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 135 tests | ✅ Done |
+| Ring simulator, phrase answer key, 139 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Built and tested; needs your OpenRouter key to go live |
