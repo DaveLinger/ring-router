@@ -111,8 +111,11 @@ you and Terri.'"
 
 Reply in one to three sentences: the answer, or what you did. It is read as a phone notification."""
 
-[claude_code_ask]   # DRAFT (Claude Code on the named host, read-only)
+[claude_code]   # DRAFT (Claude Code on the named host; "ask" and "tell" are the same)
+# Permissions come from the host's config (Claude Code's own allowed tools / permission mode),
+# not from the wording of the command.
 text = """
-This request came from a voice command. Investigate and answer it. Do not modify files, \
-restart services, or change anything; read and run diagnostics only. Finish with a summary \
-of three sentences or fewer suitable for a phone notification, then the details."""
+This request came from a voice command, possibly phrased as a question ('ask Claude Code why...') \
+or an instruction ('tell Claude Code to...'); treat both as the request. Investigate, and make \
+changes when the request calls for them. Finish with a summary of three sentences or fewer \
+suitable for a phone notification, then the details."""

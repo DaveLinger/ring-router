@@ -192,7 +192,6 @@ model = "qwen"
 say = "Ask Claude Code on the RackNerd VPS why the websites are down"
 route = "claude_code"
 host = "racknerd"
-mode = "read-only"
 extracted = "why the websites are down"
 
 [[case]]
@@ -206,7 +205,6 @@ say = "Tell Claude Code on the Mac mini to restart calsync"
 route = "claude_code"
 extracted = "to restart calsync"
 host = "mac_mini"
-mode = "write"
 
 [[case]]
 say = "Claude Code, why did the backup fail last night?"

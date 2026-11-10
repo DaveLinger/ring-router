@@ -176,7 +176,7 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 | **Research** | "Research the best robot vacuum under $500" / "Research with DeepSeek…" | A note in the "Research" folder; Pushcut just says it's ready |
 
 - **Claude Code:** hosts and spoken names are in config; unknown hosts are refused; default is the
-  Mac mini. "Ask" is read-only (reads and allowlisted diagnostics); "tell" always needs a confirmation.
+  Mac mini. "Ask" and "tell" mean the same thing; what Claude Code may do is set per host in config, not by wording.
 - **Shopping list:** on-device structured output splits items, so "mac and cheese" stays one item.
 - **Remember:** one note each, because macos-mcp caps note bodies at 2,000 characters.
 - **Research:** like "ask ChatGPT" but the output is a note; written via AppleScript to avoid the 2,000-character cap.

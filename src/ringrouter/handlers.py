@@ -452,7 +452,7 @@ def _default_agent_runner(kind: str, request: str, cfg, history: list[dict] | No
 
 def _stub(name: str) -> Callable:
     def h(r: Route, ctx: Context) -> Result:
-        extra = f" on {r.params.get('host')} ({r.params.get('mode')})" if name == "Claude Code" else ""
+        extra = f" on {r.params.get('host')}" if name == "Claude Code" else ""
         msg = f"{name} isn't built yet. Would handle{extra}: “{r.body}”"
         ctx.notify("Not done", msg)
         return Result("dry_run", msg)

@@ -111,9 +111,9 @@ def _claude_code(t: str, raw: dict) -> Route | None:
                                               "message": f"Unknown Claude Code host '{heard}'."},
                          reason="claude code: host not in config")
         host, pos = hm
-    return Route("claude_code", t, body=strip_body(t[pos:]), verb="tell" if verb == "tell" else "ask",
-                 params={"host": host, "mode": "write" if verb == "tell" else "read-only"},
-                 reason="claude code prefix")
+    # "ask" and "tell" mean the same thing here: one mode, permissions set per host in config
+    return Route("claude_code", t, body=strip_body(t[pos:]), verb=verb,
+                 params={"host": host}, reason="claude code prefix")
 
 
 def _research(t: str, raw: dict) -> Route | None:
