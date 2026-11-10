@@ -121,6 +121,25 @@ cp config.example.toml config.toml   # recipients, models, hosts, lists... (git-
 .venv/bin/ring-router init           # generates the path token + signing secret into .env
 ```
 
+### Run it as a service
+
+```sh
+cp launchd/local.ring-router.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.plist   # starts now and at login
+launchctl kickstart -k gui/$(id -u)/local.ring-router                             # restart after changes
+tailscale funnel --bg 8642                                                         # public HTTPS address
+```
+
+Set `[server] public_url` to the Funnel address so notification buttons and answer pages work from
+your phone. Logs go to `~/Library/Logs/ring-router.log`.
+
+macOS ties privacy permissions to the program that asked, so trigger them from the service's own
+context: `launchctl bootstrap gui/$(id -u) launchd/local.ring-router.permcheck.plist` runs
+`ring-router check-permissions` (Calendars needs **Full Access**, not "Add Events Only").
+
+mcp-macos is vendored in `vendor/` because npm now blocks the install script that compiles its
+EventKit helper: `cd vendor && npm install && (cd node_modules/mcp-macos && node scripts/build-swift.mjs)`.
+
 ### Configuration
 
 | File | What's in it | In git? |
@@ -181,13 +200,13 @@ phrases as you think of them; the tests fail until the router agrees.
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
 | Ring simulator, phrase answer key, 164 tests | ✅ Done |
-| iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
-| Pushcut notifications and buttons | ✅ Delivered to the phone, buttons included; confirm buttons reach the listener once the tunnel is up |
+| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Permissions granted and verified (`ring-router check-permissions`); routes still in dry run |
+| Pushcut notifications and buttons | ✅ Delivered; Send/Cancel and Full answer verified through the tunnel |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
 | Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
 | General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | Home, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
-| Tailscale Funnel tunnel, launchd service | ⬜ Not started |
+| Tailscale Funnel tunnel, launchd service | ✅ Running; buttons and answer pages work from the phone |
 
 See the **[build plan](docs/PLAN.md)** for the full design, decisions, and phase-by-phase roadmap.
 

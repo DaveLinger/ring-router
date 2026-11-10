@@ -345,7 +345,7 @@ Every route starts in dry run until you've watched it behave.
 
 | Phase | Scope | Done when |
 | --- | --- | --- |
-| **0. Capture** | Ring setup, Tailscale Funnel, logging endpoint | Real requests verify; "Webhook only" confirmed |
+| **0. Capture** 🟡 | Tailscale Funnel ✅, launchd service ✅; ring setup waits on the ring | Real requests verify; "Webhook only" confirmed |
 | **1. Skeleton** ✅ | Checks, store, parser, background jobs, notifier, simulator | Recordings echo back; tests pass |
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Cases 1–4 live; weak-match confirm works |
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Live-tested with all four models and research (notes wait on the Notes permission) |
@@ -360,9 +360,9 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 
 ## Open questions and risks
 
-- [ ] Tunnel: Tailscale Funnel chosen; install and sign-in need a VNC session for the macOS prompts.
-- [ ] macOS permission prompts (Messages, Notes, Reminders, Calendars, Contacts): also need VNC.
-- [ ] Which calendars need spoken names besides "my calendar"? What's the default?
+- [x] Tunnel: Tailscale Funnel at the Mac's ts.net address, proxying to localhost:8642; launchd keeps the listener up.
+- [x] macOS permissions (Messages, Notes, Reminders, Calendars full access, Contacts): granted to the service and verified.
+- [x] Calendars: default "Dave"; shared "Dave/Terri" (our, shared, Dave and Terri…); "Work".
 - [ ] Home coordinates and radius for "when I get home".
 - [ ] Device list and spoken names.
 - [x] OpenRouter model IDs: `gpt-6.1-terra`, `claude-sonnet-5.5`, `deepseek-v4.1-flash`, `qwen3.8-flash`; agent on `claude-sonnet-5.5`.
