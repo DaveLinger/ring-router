@@ -204,6 +204,22 @@ needed it replies with the command to say.
 - [ ] Cap how much is read per question (e.g. 7 days of messages, 50 notes).
 - [ ] Gmail and Google Drive: in or out?
 
+**How the agents are fenced in (code, not prompt):**
+
+| | Questions agent | General agent |
+| --- | --- | --- |
+| Calendar | read | read, create, update, delete |
+| Reminders | read | read, create, update, delete |
+| Notes | read | read, create, update |
+| Contacts | read | read |
+| Messages | read, only if `questions_read_messages = true` | none |
+| Mail | none | none |
+
+Tools not in the table are invisible to the agent. Each mcp-macos tool takes an `action` argument,
+so a guard checks the action on every call and refuses anything not allowed. In dry run, the general
+agent's writes return "DRY RUN: would…" instead of running. Every call is logged with its result.
+Default model: `anthropic/claude-haiku-5.5` (`[agents] model`).
+
 **General agent and Instinct:** the general agent makes calendar changes itself with macos-mcp. It
 can't message anyone. If it can't finish a request (e.g. it needs someone else's availability) it says
 so and suggests a command, such as "ask Instinct to find a time for you and Terri".
@@ -337,7 +353,7 @@ Every route starts in dry run until you've watched it behave.
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Answers arrive by Pushcut (needs API key to go live) |
 | **4. Apple apps** | Notes, reminders, calendar live; EventKit location helper | Cases 5–7 work incl. "when I get home" |
 | **5. Home** | Aliases, Hubitat + HomeMCPBridge, optional confirm-first actions | Case 8 through both backends |
-| **6. General agent** | Pydantic AI + macos-mcp (no mail) | Unmatched commands handled or declined |
+| **6. Agents** ✅ | Pydantic AI general agent + read-only questions agent over macos-mcp, tool/action guard | Unmatched commands handled or declined (needs key + permissions to go live) |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → questions agent → research → Claude Code per host → Focus (experimental) | Each live in order |
 
 Tier 3b and the gesture mode switch come later, if real use shows they're worth it.

@@ -9,7 +9,7 @@ Hold the button, speak, and your words become an iMessage, a note, a reminder, a
 a light switch, or a question to the AI model of your choice.
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)
+![Core](https://img.shields.io/badge/core-stdlib%20only-success)
 ![Platform](https://img.shields.io/badge/platform-macOS%2027-000000?logo=apple&logoColor=white)
 ![Status](https://img.shields.io/badge/status-dry%20run-orange)
 
@@ -92,6 +92,8 @@ shopping lists, and reading dates out of reminders and events.
   you hold the button, so what you say runs.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
 - **No double texts.** A send that times out is marked unknown and never retried automatically.
+- **Agents can't text or email.** The general agent gets calendar, reminders and notes tools; the
+  questions agent gets read-only tools. Allowed tools *and actions* are enforced in code, not just the prompt.
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.
 
 </details>
@@ -152,7 +154,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (125 tests)
+.venv/bin/pytest -q               # everything (135 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -170,12 +172,13 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 125 tests | ✅ Done |
+| Ring simulator, phrase answer key, 135 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar via mcp-macos | 🟡 Written; first live send waiting on a macOS permission prompt |
 | Pushcut notifications and confirm buttons | 🟡 Written, untested (console notifier by default) |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Built and tested; needs your OpenRouter key to go live |
 | Research notes (web search → Apple Note) | ✅ Built and tested; note writing waits on the Notes permission |
-| Home, questions agent, general agent, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
+| General agent + read-only questions agent (Pydantic AI, macOS tools) | ✅ Built and tested; needs your OpenRouter key + macOS permissions to go live |
+| Home, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
 | Tailscale Funnel tunnel, launchd service | ⬜ Not started |
 
 See the **[build plan](docs/PLAN.md)** for the full design, decisions, and phase-by-phase roadmap.
@@ -195,6 +198,7 @@ ring-router/
 │   ├── handlers.py    # one handler per route; dry run enforced here
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
+│   ├── agents.py      # general + questions agents (Pydantic AI, tool/action guard)
 │   ├── md.py          # Markdown → HTML for the answer page and research notes
 │   ├── mcp.py         # minimal stdio MCP client for mcp-macos
 │   ├── notify.py      # console + Pushcut notifiers

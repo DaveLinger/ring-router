@@ -7,11 +7,14 @@ name = "ringrouter"
 version = "0.1.0"
 description = "Voice-command router for Pebble Index 01 ring transcripts"
 requires-python = ">=3.11"
-# Standard library only. Secrets come from a git-ignored .env file.
-dependencies = []
+# The core is standard library only. pydantic-ai powers the two agents (imported only when
+# an agent runs). Secrets come from a git-ignored .env file.
+dependencies = [
+    "pydantic-ai-slim[openai,mcp]>=2.66",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "fastmcp-slim[server]>=4.1"]   # server half: fake mcp-macos in tests
 
 [project.scripts]
 ring-router = "ringrouter.cli:main"
@@ -22,3 +25,4 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["live: uses the real on-device model (/usr/bin/fm)"]
+filterwarnings = ["ignore::DeprecationWarning:beartype.*"]

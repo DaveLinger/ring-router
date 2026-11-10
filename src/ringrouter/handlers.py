@@ -44,6 +44,7 @@ class Context:
     llm: OpenRouter = field(default=None)
     llm_store: LLMStore = field(default=None)
     notes_writer: Callable = field(default=None)   # (title, html, folder) -> None
+    agent_runner: Callable = field(default=None)   # (kind, request, cfg) -> (text, AgentSpec)
 
     def __post_init__(self):
         if self.mcp_call is None:
@@ -55,6 +56,8 @@ class Context:
             self.llm_store = LLMStore(self.store)
         if self.notes_writer is None:
             self.notes_writer = applescript_note
+        if self.agent_runner is None:
+            self.agent_runner = _default_agent_runner
 
     def dry(self, route: str) -> bool:
         return self.cfg.is_dry_run(route)
@@ -370,6 +373,28 @@ def h_research(r: Route, ctx: Context) -> Result:
     return Result("done", f"research note {title!r} in {folder!r} ({len(body)} chars)")
 
 
+def h_agent(r: Route, ctx: Context, kind: str) -> Result:
+    """Questions agent (read-only) or general agent (macOS tools, no mail/messages)."""
+    label = "Answer" if kind == "questions" else "Done"
+    try:
+        text, spec = ctx.agent_runner(kind, r.body, ctx.cfg)
+    except Exception as e:
+        log.exception("%s agent failed", kind)
+        ctx.notify("Not done", f"{e}. Heard: \u201c{r.transcript}\u201d")
+        return Result("failed", f"{kind} agent error: {e}")
+    calls = ", ".join(f"{c['tool']}.{c['action']}={c['result']}" for c in spec.calls) or "no tools"
+    limit = int(ctx.cfg.section("notify").get("max_chars", 300))
+    title = label + (" (dry run)" if spec.dry_run and any(c["result"] == "dry_run" for c in spec.calls) else "")
+    ctx.notify(title, _short(text, limit))
+    state = "dry_run" if any(c["result"] == "dry_run" for c in spec.calls) else "done"
+    return Result(state, f"{kind} agent: {_short(text, 120)} [{calls}]")
+
+
+def _default_agent_runner(kind: str, request: str, cfg):
+    from .agents import run_agent  # noqa: PLC0415  (pydantic-ai imported only when an agent runs)
+    return run_agent(kind, request, cfg)
+
+
 def _stub(name: str) -> Callable:
     def h(r: Route, ctx: Context) -> Result:
         extra = f" on {r.params.get('host')} ({r.params.get('mode')})" if name == "Claude Code" else ""
@@ -393,8 +418,8 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
     "scene": h_scene,
     "llm": h_llm,
     "research": h_research,
-    "questions": _stub("Questions agent"),
-    "agent": _stub("General agent"),
+    "questions": lambda r, ctx: h_agent(r, ctx, "questions"),
+    "agent": lambda r, ctx: h_agent(r, ctx, "general"),
     "claude_code": _stub("Claude Code"),
 }
 

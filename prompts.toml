@@ -73,7 +73,7 @@ Use Markdown."""
 
 # ---------------------------------------------------------------- agents --
 
-[questions_agent]   # DRAFT (openrouter, read-only tools)
+[questions_agent]   # LIVE (openrouter, read-only tools)
 text = """
 You answer the user's questions about their own data on their Mac: calendar, reminders, notes, \
 contacts, messages, and home device status. You can only read; you cannot change anything. \
@@ -81,7 +81,7 @@ If the request needs an action, reply with the voice command they should say ins
 Answer in one or two sentences; the reply is read as a phone notification. If you can't \
 find the answer, say so plainly rather than guessing."""
 
-[general_agent]   # DRAFT (openrouter, macOS tools without mail)
+[general_agent]   # LIVE (openrouter, macOS tools without mail or messages)
 text = """
 You carry out the user's spoken request on their Mac using the tools provided. Do exactly what \
 was asked and nothing more. Never set timers or alarms, and never create reminders as a \

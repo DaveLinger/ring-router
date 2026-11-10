@@ -30,7 +30,8 @@ MAX_BODY = 20 * 1024 * 1024
 
 class App:
     def __init__(self, cfg: Config, *, store: Store | None = None, notifier=None, fm: FM | None = None,
-                 mcp_call=None, background: bool = True, llm=None, notes_writer=None):
+                 mcp_call=None, background: bool = True, llm=None, notes_writer=None,
+                 agent_runner=None):
         self.cfg = cfg
         self.store = store or Store(cfg.state_dir / "state.db")
         self.notifier = notifier or make_notifier(cfg)
@@ -40,6 +41,7 @@ class App:
         self.llm = llm or OpenRouter(cfg.secret("openrouter_api_key"))
         self.llm_store = LLMStore(self.store)
         self.notes_writer = notes_writer
+        self.agent_runner = agent_runner
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="job") if background else None
         self.public_url = cfg.server.get("public_url", f"http://{cfg.server.get('host')}:{cfg.server.get('port')}")
         for d in self.store.recover_interrupted():
@@ -48,7 +50,8 @@ class App:
     def ctx(self, delivery_id: str) -> Context:
         return Context(cfg=self.cfg, notifier=self.notifier, store=self.store, fm=self.fm,
                        delivery_id=delivery_id, public_url=self.public_url, mcp_call=self.mcp_call,
-                       llm=self.llm, llm_store=self.llm_store, notes_writer=self.notes_writer)
+                       llm=self.llm, llm_store=self.llm_store, notes_writer=self.notes_writer,
+                       agent_runner=self.agent_runner)
 
     def process(self, delivery_id: str, transcript: str) -> tuple[int, str]:
         """Route + handle one authenticated, de-duplicated transcript."""
