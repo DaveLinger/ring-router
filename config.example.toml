@@ -121,6 +121,7 @@ geofence_radius_m = 100
 # ----------------------------------------------------------------- calendars --
 
 [calendars]
+sources = ["iCloud"]        # only these accounts' calendars (hides the Google copies calsync mirrors)
 default_minutes = 60        # length of an event when no end time is said
 default = "CHANGE-ME"        # what "my calendar" means, e.g. "Dave"
 # aliases: spoken name (before the word "calendar") -> Calendar name

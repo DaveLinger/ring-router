@@ -116,14 +116,15 @@ def cmd_check_permissions(args) -> int:
     from . import mcp  # noqa: PLC0415
     cfg = load_config(args.config)
     cmd = cfg.section("macos_mcp").get("command", ["npx", "-y", "mcp-macos@4.1.0"])
+    env = mcp.macos_mcp_env(cfg)
     probes = [
-        ("Calendars", lambda: mcp.call_tool(cmd, "calendar_calendars", {"action": "read"})),
-        ("Reminders", lambda: mcp.call_tool(cmd, "reminders_lists", {"action": "read"})),
-        ("Notes (mcp)", lambda: mcp.call_tool(cmd, "notes_folders", {"action": "read"})),
+        ("Calendars", lambda: mcp.call_tool(cmd, "calendar_calendars", {"action": "read"}, env=env)),
+        ("Reminders", lambda: mcp.call_tool(cmd, "reminders_lists", {"action": "read"}, env=env)),
+        ("Notes (mcp)", lambda: mcp.call_tool(cmd, "notes_folders", {"action": "read"}, env=env)),
         ("Notes (AppleScript)", lambda: subprocess.run(
             ["/usr/bin/osascript", "-e", 'tell application "Notes" to count folders'],
             check=True, capture_output=True, text=True, timeout=120).stdout),
-        ("Contacts", lambda: mcp.call_tool(cmd, "contacts_people", {"action": "search", "search": "Dave"})),
+        ("Contacts", lambda: mcp.call_tool(cmd, "contacts_people", {"action": "search", "search": "Dave"}, env=env)),
     ]
     hub = cfg.section("hubitat")
     if hub.get("host") and cfg.secret("hubitat_token"):
@@ -158,7 +159,7 @@ def cmd_check_permissions(args) -> int:
     if rc:
         to = rc.get("handle")
         probes.append(("Messages (send)", lambda: mcp.call_tool(cmd, "messages_chat", {
-            "action": "create", "to": to, "text": "ring-router permission check: if you see this, sending works."})))
+            "action": "create", "to": to, "text": "ring-router permission check: if you see this, sending works."}, env=env)))
     ok = True
     for name, fn in probes:
         try:

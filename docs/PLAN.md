@@ -393,7 +393,7 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 
 - [x] Tunnel: Tailscale Funnel at the Mac's ts.net address, proxying to localhost:8642; launchd keeps the listener up.
 - [x] macOS permissions (Messages, Notes, Reminders, Calendars full access, Contacts): granted to the service and verified.
-- [x] Calendars: default "Dave"; shared "Dave/Terri" (our, shared, Dave and Terri…); "Work".
+- [x] Calendars: default "Dave"; shared "Dave/Terri" (our, shared, Dave and Terri…); "Work". iCloud only: the Google calendars macOS also sees (calsync mirrors them) are filtered out via a patch to the vendored mcp-macos (`[calendars] sources`).
 - [x] Home location: read from the Contacts My Card each time; 100 m geofence.
 - [x] Devices: pulled from Hubitat automatically; nicknames in `[hubitat] aliases`, tie-breakers in `prefer`.
 - [x] OpenRouter model IDs: `gpt-6.1-terra`, `claude-sonnet-5.5`, `deepseek-v4.1-flash`, `qwen3.8-flash`; agent on `claude-sonnet-5.5`.

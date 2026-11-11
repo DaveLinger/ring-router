@@ -1,0 +1,57 @@
+--- a/src/swift/EventKitCLI.swift
++++ b/src/swift/EventKitCLI.swift
+@@ -342,25 +342,39 @@
+     func deleteList(title: String) throws { try eventStore.removeCalendar(try findList(named: title), commit: true) }
+     
+     // MARK: Calendar Events Management
++    // ring-router patch: MCP_MACOS_CALENDAR_SOURCES="iCloud" (comma-separated source titles) limits
++    // every calendar operation to those accounts, e.g. to hide a Google account that is two-way
++    // synced into iCloud (otherwise every event appears twice). Unset = all calendars.
++    private func allowedEventCalendars() -> [EKCalendar] {
++        let all = eventStore.calendars(for: .event)
++        guard let raw = ProcessInfo.processInfo.environment["MCP_MACOS_CALENDAR_SOURCES"], !raw.isEmpty else { return all }
++        let allowed = Set(raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
++        return all.filter { allowed.contains($0.source.title.lowercased()) }
++    }
++    private func isAllowedCalendar(_ cal: EKCalendar) -> Bool {
++        return allowedEventCalendars().contains(where: { $0.calendarIdentifier == cal.calendarIdentifier })
++    }
++
+     private func findCalendar(named name: String?) throws -> EKCalendar {
+         guard let calName = name, !calName.isEmpty else {
+-            guard let defaultCal = eventStore.defaultCalendarForNewEvents else {
++            if let defaultCal = eventStore.defaultCalendarForNewEvents, isAllowedCalendar(defaultCal) { return defaultCal }
++            guard let fallback = allowedEventCalendars().first(where: { $0.allowsContentModifications }) else {
+                 throw NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "No default calendar available."])
+             }
+-            return defaultCal
++            return fallback
+         }
+-        guard let calendar = eventStore.calendars(for: .event).first(where: { $0.title == calName }) else {
++        guard let calendar = allowedEventCalendars().first(where: { $0.title == calName }) else {
+             throw NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "Calendar '\(calName)' not found."])
+         }
+         return calendar
+     }
+     
+     func getCalendars() -> [CalendarJSON] {
+-        return eventStore.calendars(for: .event).map { $0.toCalendarJSON() }
++        return allowedEventCalendars().map { $0.toCalendarJSON() }
+     }
+     
+     func getEvents(startDate: Date?, endDate: Date?, calendarName: String?, search: String?) throws -> [EventJSON] {
+-        let calendars = calendarName != nil ? [try findCalendar(named: calendarName)] : eventStore.calendars(for: .event)
++        let calendars = calendarName != nil ? [try findCalendar(named: calendarName)] : allowedEventCalendars()
+         let predicate = eventStore.predicateForEvents(withStart: startDate ?? Date.distantPast, end: endDate ?? Date.distantFuture, calendars: calendars)
+         
+         let events = eventStore.events(matching: predicate)
+@@ -434,7 +448,8 @@
+     }
+     
+     private func findEvent(withId id: String) -> EKEvent? {
+-        return eventStore.event(withIdentifier: id)
++        guard let event = eventStore.event(withIdentifier: id), isAllowedCalendar(event.calendar) else { return nil }
++        return event
+     }
+     
+     func updateEvent(id: String, title: String?, calendarName: String?, startDateString: String?, endDateString: String?, notes: String?, location: String?, urlString: String?, isAllDay: Bool?, recurrence: String?, recurrenceInterval: Int?, recurrenceEnd: String?, recurrenceCount: Int?) throws -> EventJSON {

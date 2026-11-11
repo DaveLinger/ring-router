@@ -10,9 +10,19 @@ class MCPError(Exception):
     pass
 
 
-def call_tool(command: list[str], name: str, arguments: dict, timeout_s: int = 60) -> str:
+def macos_mcp_env(cfg) -> dict:
+    """Environment for mcp-macos: limit calendars to [calendars] sources (patched EventKit helper)."""
+    import os  # noqa: PLC0415
+    env = dict(os.environ)
+    sources = cfg.section("calendars").get("sources") or []
+    if sources:
+        env["MCP_MACOS_CALENDAR_SOURCES"] = ",".join(sources)
+    return env
+
+
+def call_tool(command: list[str], name: str, arguments: dict, timeout_s: int = 60, env: dict | None = None) -> str:
     p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.DEVNULL, text=True)
+                         stderr=subprocess.DEVNULL, text=True, env=env)
     try:
         def rpc(i, method, params=None, notify=False):
             msg = {"jsonrpc": "2.0", "method": method, "params": params or {}}

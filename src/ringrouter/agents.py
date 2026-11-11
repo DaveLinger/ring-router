@@ -129,8 +129,10 @@ def default_model(cfg):
 def default_mcp_source(cfg):
     from pydantic_ai.mcp import StdioTransport  # noqa: PLC0415
 
+    from .mcp import macos_mcp_env  # noqa: PLC0415
+
     cmd = cfg.section("macos_mcp").get("command", ["npx", "-y", "mcp-macos@4.1.0"])
-    return StdioTransport(command=cmd[0], args=list(cmd[1:]))
+    return StdioTransport(command=cmd[0], args=list(cmd[1:]), env=macos_mcp_env(cfg))
 
 
 def default_searcher(cfg) -> Callable[[str], tuple[str, list[dict]]]:

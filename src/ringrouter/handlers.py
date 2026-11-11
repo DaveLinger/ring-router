@@ -55,7 +55,8 @@ class Context:
     def __post_init__(self):
         if self.mcp_call is None:
             cmd = self.cfg.section("macos_mcp").get("command", ["npx", "-y", "mcp-macos@4.1.0"])
-            self.mcp_call = lambda name, args: mcp.call_tool(cmd, name, args)
+            env = mcp.macos_mcp_env(self.cfg)
+            self.mcp_call = lambda name, args: mcp.call_tool(cmd, name, args, env=env)
         if self.llm is None:
             self.llm = OpenRouter(self.cfg.secret("openrouter_api_key"))
         if self.llm_store is None:

@@ -155,8 +155,10 @@ To trigger and verify all prompts from that same context:
 `ring-router check-permissions` (log: `~/Library/Logs/ring-router-permcheck.log`). Calendars needs
 **Full Access**, not "Add Events Only".
 
-mcp-macos is vendored in `vendor/` because npm now blocks the install script that compiles its
-EventKit helper: `cd vendor && npm install && (cd node_modules/mcp-macos && node scripts/build-swift.mjs)`.
+mcp-macos is vendored in `vendor/`: npm now blocks the install script that compiles its EventKit
+helper, and ring-router patches that helper (`vendor/patches/`) so `[calendars] sources = ["iCloud"]`
+hides other accounts, such as a Google account that calsync mirrors into iCloud, which would otherwise
+make every event appear twice. Set up with `vendor/setup.sh` (install, patch, build).
 </details>
 
 ### Activity page and down alert
