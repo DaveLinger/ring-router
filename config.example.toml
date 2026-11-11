@@ -129,6 +129,9 @@ remember_folder = "Remember"
 [hubitat]
 host = "192.168.1.10"          # hub's local IP
 app_id = "CHANGE-ME"           # Maker API app ID; token is RING_ROUTER_HUBITAT_TOKEN in .env
+exclude = []                  # device labels never to control (detectors/alarms are always excluded)
+# spoken nickname -> exact Hubitat device label (for names the matcher can't guess)
+aliases = { "front door" = "Front Door Lock", "porch light" = "Front Porch Light" }
 
 [home]
 # Actions that need a Pushcut Send/Cancel tap before they run. Empty = everything runs as

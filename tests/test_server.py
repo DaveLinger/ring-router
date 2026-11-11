@@ -136,13 +136,25 @@ def test_shopping_list_split(server):
     assert code == 200 and "['Milk', 'Eggs', 'Bread']" in text
 
 
-def test_unlock_runs_without_confirm_by_default(server):
+def test_unlock_runs_without_confirm_by_default(server, monkeypatch):
+    from ringrouter import handlers
+    from ringrouter.hubitat import Hubitat
+    devs = [{"id": 67, "label": "Living Room Door", "room": "Living Room", "capabilities": ["Lock"]}]
+    hub = Hubitat("x", "1", "t", fetch=lambda p: devs if p == "/devices/all" else {},
+                  aliases={"front door": "Living Room Door"})
+    monkeypatch.setattr(handlers, "get_hubitat", lambda ctx: hub)
     base, _, notifier = server
     (code, text), _ = send(base, "Unlock the front door")
     assert "needs_confirm" not in text and not notifier.sent[-1].buttons
 
 
-def test_unlock_confirm_when_configured(server, cfg):
+def test_unlock_confirm_when_configured(server, cfg, monkeypatch):
+    from ringrouter import handlers
+    from ringrouter.hubitat import Hubitat
+    devs = [{"id": 67, "label": "Living Room Door", "room": "Living Room", "capabilities": ["Lock"]}]
+    hub = Hubitat("x", "1", "t", fetch=lambda p: devs if p == "/devices/all" else {},
+                  aliases={"front door": "Living Room Door"})
+    monkeypatch.setattr(handlers, "get_hubitat", lambda ctx: hub)
     base, _, notifier = server
     cfg.raw.setdefault("home", {})["confirm_actions"] = ["unlock", "open"]
     (code, text), _ = send(base, "Unlock the front door")
