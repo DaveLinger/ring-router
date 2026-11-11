@@ -141,6 +141,12 @@ def cmd_check_permissions(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_watchdog(args) -> int:
+    from .watchdog import run_once  # noqa: PLC0415
+    print(time.strftime("%F %T"), run_once(load_config(args.config)), flush=True)
+    return 0
+
+
 def cmd_recent(args) -> int:
     from .store import Store  # noqa: PLC0415
     cfg = load_config(args.config, load_secrets=False)
@@ -171,6 +177,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("check-permissions", help="trigger/verify macOS permission prompts")
     s.add_argument("--message-to", help="recipient key for one test iMessage (e.g. dave)")
     s.set_defaults(fn=cmd_check_permissions)
+    s = sub.add_parser("watchdog", help="health check; Pushcut alert when the listener or tunnel is down")
+    s.set_defaults(fn=cmd_watchdog)
     s = sub.add_parser("recent"); s.add_argument("-n", type=int, default=20); s.set_defaults(fn=cmd_recent)
 
     args = ap.parse_args(argv)
