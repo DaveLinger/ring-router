@@ -37,7 +37,7 @@ def cfg(monkeypatch):
     for n in ("OPENROUTER_API_KEY", "PUSHCUT_API_KEY", "HUBITAT_TOKEN"):
         monkeypatch.setenv(f"RING_ROUTER_{n}", "")
     c = load_config(EXAMPLE_CONFIG)
-    c.secrets = {"path_token": "testpath", "signing_secret": "testsecret"}
+    c.secrets = {"path_token": "testpath", "signing_secret": "testsecret", "activity_token": "acttoken"}
     return c
 
 

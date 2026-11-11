@@ -58,12 +58,102 @@ class Context:
             self.notes_writer = applescript_note
         if self.agent_runner is None:
             self.agent_runner = _default_agent_runner
+        # Tracing wrappers: every side effect and model call lands in the activity trace.
+        self.mcp_call = _traced_mcp(self, self.mcp_call)
+        self.notes_writer = _traced_notes(self, self.notes_writer)
+        self.llm = _TracedLLM(self, self.llm)
+        self.fm = _TracedFM(self, self.fm)
 
     def dry(self, route: str) -> bool:
         return self.cfg.is_dry_run(route)
 
+    def trace(self, phase: str, **data) -> None:
+        try:
+            self.store.add_trace(self.delivery_id, phase, data)
+        except Exception:  # tracing must never break a command
+            log.debug("trace failed", exc_info=True)
+
     def notify(self, title: str, text: str, buttons: list[Button] | None = None) -> None:
+        self.trace("notification", title=title, text=text,
+                   buttons=[{"label": b.label, "url": b.url, "background": b.background} for b in buttons or []])
         self.notifier.send(Notice(title, text, buttons or []))
+
+
+def _traced_mcp(ctx: Context, call: Callable) -> Callable:
+    if getattr(call, "_traced", False):
+        return call
+
+    def wrapped(name: str, args: dict):
+        ctx.trace("command", target="mcp-macos", tool=name, args=args)
+        try:
+            out = call(name, args)
+        except Exception as e:
+            ctx.trace("command_result", tool=name, ok=False, error=str(e))
+            raise
+        ctx.trace("command_result", tool=name, ok=True, output=str(out)[:2000])
+        return out
+
+    wrapped._traced = True
+    return wrapped
+
+
+def _traced_notes(ctx: Context, writer: Callable) -> Callable:
+    if getattr(writer, "_traced", False):
+        return writer
+
+    def wrapped(title: str, body_html: str, folder: str):
+        ctx.trace("command", target="AppleScript Notes", title=title, folder=folder, chars=len(body_html))
+        writer(title, body_html, folder)
+        ctx.trace("command_result", target="AppleScript Notes", ok=True)
+
+    wrapped._traced = True
+    return wrapped
+
+
+class _TracedLLM:
+    """Records each OpenRouter request and reply."""
+
+    def __init__(self, ctx: Context, inner):
+        self._ctx, self._inner = ctx, getattr(inner, "_inner", inner)
+
+    def __getattr__(self, name):          # pass everything else through (e.g. test fakes' .calls)
+        return getattr(self._inner, name)
+
+    def chat(self, model, messages, **kw):
+        user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        self._ctx.trace("model_request", model=model, web=kw.get("web", False), messages=len(messages),
+                        history_turns=max(0, (len(messages) - 2) // 2), sent=user,
+                        system_prompt=next((m["content"] for m in messages if m["role"] == "system"), ""))
+        reply = self._inner.chat(model, messages, **kw)
+        self._ctx.trace("model_reply", model=reply.model, chars=len(reply.text), cost=reply.cost,
+                        tokens=reply.tokens, sources=reply.citations, text=reply.text[:4000])
+        return reply
+
+
+class _TracedFM:
+    """Records each on-device model task (input -> output)."""
+
+    TASKS = ("rewrite_ask", "title", "split_items", "extract", "standalone")
+
+    def __init__(self, ctx: Context, inner):
+        self._ctx, self._inner = ctx, getattr(inner, "_inner", inner)
+
+    def __getattr__(self, name):
+        attr = getattr(self._inner, name)
+        if name not in self.TASKS:
+            return attr
+
+        def wrapped(*args, **kw):
+            try:
+                out = attr(*args, **kw)
+            except Exception as e:
+                self._ctx.trace("on_device_model", task=name, input=[str(a)[:500] for a in args], error=str(e))
+                raise
+            self._ctx.trace("on_device_model", task=name, input=[str(a)[:500] for a in args
+                                                                 if not isinstance(a, dict)], output=out)
+            return out
+
+        return wrapped
 
 
 def _dry_tag(ctx: Context, route: str) -> str:
@@ -107,6 +197,8 @@ def h_imessage(r: Route, ctx: Context) -> Result:
     rc = ctx.cfg.raw["recipients"][r.params["recipient"]]
     display = rc.get("display", r.params["recipient"])
     text, rewrote = compose_imessage(r, ctx)
+    ctx.trace("message_composed", recipient=display, tier=r.params.get("tier"), heard=r.params.get("heard"),
+              spoken=r.body, text=text, rewritten=rewrote)
     if not text:
         return Result("discarded", "empty message")
 
@@ -414,6 +506,8 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
             sub_r.params["tier"] = "weak"            # noise around it: ask before texting anyone
             sub_r.params["heard"] = f"{sub_r.params.get('heard', '')} (picked out of background noise)"
         log.info("delivery %s: agent rerouted %r -> %s", ctx.delivery_id[:8], command, sub_r.describe())
+        ctx.trace("reroute", command=command, route=sub_r.route, reason=sub_r.reason, params=sub_r.params,
+                  extracted=sub_r.body)
         res = run(sub_r, ctx)
         return sub_r.route, f"{res.state}: {res.summary}"
 
@@ -424,6 +518,8 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
         ctx.notify("Not done", f"{e}. Heard: \u201c{r.transcript}\u201d")
         return Result("failed", f"{kind} agent error: {e}")
     ctx.llm_store.remember(AGENT_THREAD, r.body, text)
+    ctx.trace("agent", kind=kind, history_turns=len(history) // 2, tool_calls=list(spec.calls),
+              sources=list(getattr(spec, "citations", [])), reply=text)
     if getattr(spec, "rerouted", None):   # the rerouted route already notified the user
         rr = spec.rerouted[0]
         return Result("done", f"agent rerouted {rr['command']!r} -> {rr['route']}: {rr['summary']}")

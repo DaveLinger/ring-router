@@ -30,7 +30,7 @@ def _setup_logging(verbose: bool) -> None:
 
 def cmd_init(args) -> int:
     have = read_secrets()
-    for name in ("path_token", "signing_secret"):
+    for name in ("path_token", "signing_secret", "activity_token"):
         if name in have and not args.force:
             print(f"{name}: already set (use --force to replace)")
             continue

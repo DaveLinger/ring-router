@@ -10,18 +10,20 @@ Status codes follow the Pebble app's retry behaviour:
 from __future__ import annotations
 
 import hmac
+import urllib.parse
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import handlers, md, protocol
+from . import activity, handlers, md, protocol
 from .config import Config
 from .fm import FM
 from .handlers import Context, Result
 from .llm import LLMStore, OpenRouter
 from .notify import make_notifier
 from .router import route
+from .text import clean
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -44,6 +46,7 @@ class App:
         self.agent_runner = agent_runner
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="job") if background else None
         self.public_url = cfg.server.get("public_url", f"http://{cfg.server.get('host')}:{cfg.server.get('port')}")
+        self.store.prune(int(cfg.server.get("retention_days", 90)))
         for d in self.store.recover_interrupted():
             log.error("delivery %s was mid-send at shutdown; marked unknown (not resent)", d[:8])
 
@@ -55,22 +58,30 @@ class App:
 
     def process(self, delivery_id: str, transcript: str) -> tuple[int, str]:
         """Route + handle one authenticated, de-duplicated transcript."""
+        ctx = self.ctx(delivery_id)
+        ctx.trace("transcript", text=transcript)
+        ctx.trace("cleaned", text=clean(transcript))
         r = route(transcript, self.cfg)
+        ctx.trace("route", route=r.route, reason=r.reason, params=r.params, extracted=r.body, verb=r.verb,
+                  slow=r.route in handlers.SLOW_ROUTES, dry_run=self.cfg.is_dry_run(r.route))
         log.info("delivery %s: %s", delivery_id[:8], r.describe())
         self.store.set_state(delivery_id, "received", transcript=r.transcript, route=r.route)
-        ctx = self.ctx(delivery_id)
         if r.route in handlers.SLOW_ROUTES and self.pool:
             self.store.set_state(delivery_id, "accepted", summary=r.reason)
+            ctx.trace("response", http_status=200, body=f"accepted: {r.route}", note="slow route; finishing in background")
             self.pool.submit(self._background, r, ctx)
             return 200, f"accepted: {r.route}"
         res = handlers.run(r, ctx)
         self.store.set_state(delivery_id, res.state, summary=res.summary)
+        ctx.trace("result", state=res.state, summary=res.summary)
+        ctx.trace("response", http_status=res.http_status, body=f"{res.state}: [{r.route}] {res.summary}")
         log.info("delivery %s: %s: %s", delivery_id[:8], res.state, res.summary)
         return res.http_status, f"{res.state}: [{r.route}] {res.summary}"
 
     def _background(self, r, ctx: Context) -> None:
         res = handlers.run(r, ctx)
         self.store.set_state(ctx.delivery_id, res.state, summary=res.summary)
+        ctx.trace("result", state=res.state, summary=res.summary, background=True)
         log.info("delivery %s: (background) %s: %s", ctx.delivery_id[:8], res.state, res.summary)
 
     def answer_page(self, aid: str) -> str | None:
@@ -106,6 +117,7 @@ class App:
 def make_handler(app: App):
     cfg = app.cfg
     path_token = cfg.secret("path_token") or ""
+    activity_token = cfg.secret("activity_token") or ""
     secret = cfg.secret("signing_secret") or ""
     window = int(cfg.server.get("timestamp_window_s", 300))
     hook_lock = threading.Lock()  # serialise dedupe check + claim
@@ -132,6 +144,17 @@ def make_handler(app: App):
                 return self.reply(200, "ok")
             if p.startswith("/confirm/"):
                 return self._confirm(p)
+            if activity_token and p.startswith("/activity/"):
+                parts = p.split("/")          # ['', 'activity', token, (delivery_id)]
+                if len(parts) >= 3 and hmac.compare_digest(parts[2], activity_token):
+                    base = f"/activity/{activity_token}"
+                    if len(parts) == 3 or parts[3] == "":
+                        page = activity.list_page(base, app.store.activity(100))
+                    else:
+                        did = urllib.parse.unquote(parts[3])
+                        page = activity.detail_page(base, app.store.get_delivery(did), app.store.get_trace(did))
+                    return self._html(page)
+                return self.reply(404, "not found")
             if p.startswith("/answers/"):
                 page = app.answer_page(p.split("/", 2)[2])
                 if page is None:
@@ -146,6 +169,16 @@ def make_handler(app: App):
                 self.wfile.write(data)
                 return None
             return self.reply(404, "not found")
+
+        def _html(self, page: str):
+            data = page.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Robots-Tag", "noindex")
+            self.end_headers()
+            self.wfile.write(data)
 
         def do_POST(self):
             p = self.path.split("?", 1)[0]
@@ -185,6 +218,12 @@ def make_handler(app: App):
             except Exception:
                 app.store.set_state(did, "discarded", summary="malformed multipart")
                 return self.reply(400, "malformed multipart")
+            app.store.add_trace(did, "received", {
+                "trigger": v.trigger, "webhook_version": self.headers.get("X-Index-Webhook-Version"),
+                "signed_at": v.timestamp, "signature": "valid", "client": fields.get("client"),
+                "recorded_at": fields.get("recordedAt"), "body_bytes": length,
+                "fields": sorted(fields), "audio_part": b'name="audio"' in body,
+                "via": self.headers.get("X-Forwarded-For") or self.client_address[0]})
             transcript = (fields.get("transcription") or "").strip()
             if not transcript:
                 app.store.set_state(did, "discarded", summary="no transcription part")

@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS deliveries (
   first_seen REAL NOT NULL,
   updated REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS trace (
+  delivery_id TEXT NOT NULL,
+  ts REAL NOT NULL,
+  phase TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS trace_delivery ON trace(delivery_id, ts);
 CREATE TABLE IF NOT EXISTS pending (
   id TEXT PRIMARY KEY,
   delivery_id TEXT,
@@ -62,6 +69,44 @@ class Store:
         with self.lock:
             return self.conn.execute("SELECT delivery_id, state, route, transcript, summary, updated FROM deliveries"
                                      " ORDER BY updated DESC LIMIT ?", (limit,)).fetchall()
+
+    # trace (activity page) --------------------------------------------------
+    def add_trace(self, delivery_id: str, phase: str, data: dict) -> None:
+        if not delivery_id:
+            return
+        with self.lock:
+            self.conn.execute("INSERT INTO trace VALUES(?,?,?,?)",
+                              (delivery_id, time.time(), phase, json.dumps(data, default=str)))
+
+    def get_trace(self, delivery_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.conn.execute("SELECT ts, phase, data FROM trace WHERE delivery_id=? ORDER BY ts, rowid",
+                                     (delivery_id,)).fetchall()
+        return [{"ts": ts, "phase": ph, "data": json.loads(d)} for ts, ph, d in rows]
+
+    def activity(self, limit: int = 100) -> list[dict]:
+        """Recent deliveries with their model cost (sum of model_reply costs in the trace)."""
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT d.delivery_id, d.state, d.route, d.transcript, d.summary, d.first_seen, d.updated,"
+                " (SELECT SUM(json_extract(t.data, '$.cost')) FROM trace t"
+                "   WHERE t.delivery_id = d.delivery_id AND t.phase = 'model_reply') AS cost"
+                " FROM deliveries d ORDER BY d.first_seen DESC LIMIT ?", (limit,)).fetchall()
+        keys = ("delivery_id", "state", "route", "transcript", "summary", "first_seen", "updated", "cost")
+        return [dict(zip(keys, r)) for r in rows]
+
+    def get_delivery(self, delivery_id: str) -> dict | None:
+        with self.lock:
+            r = self.conn.execute("SELECT delivery_id, state, route, transcript, summary, first_seen, updated"
+                                  " FROM deliveries WHERE delivery_id=?", (delivery_id,)).fetchone()
+        keys = ("delivery_id", "state", "route", "transcript", "summary", "first_seen", "updated")
+        return dict(zip(keys, r)) if r else None
+
+    def prune(self, days: int = 90) -> None:
+        cutoff = time.time() - days * 86400
+        with self.lock:
+            self.conn.execute("DELETE FROM trace WHERE ts < ?", (cutoff,))
+            self.conn.execute("DELETE FROM deliveries WHERE updated < ?", (cutoff,))
 
     def recover_interrupted(self) -> list[str]:
         """A send in progress at shutdown has unknown status; never resend it."""

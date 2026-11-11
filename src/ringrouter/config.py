@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-SECRET_NAMES = ("path_token", "signing_secret", "openrouter_api_key", "pushcut_webhook_url", "pushcut_api_key",
-                "hubitat_token")
+SECRET_NAMES = ("path_token", "signing_secret", "activity_token", "openrouter_api_key", "pushcut_webhook_url",
+                "pushcut_api_key", "hubitat_token")
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = PROJECT_DIR / ".env"
