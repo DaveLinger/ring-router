@@ -78,9 +78,15 @@ def test_ambiguous_lock_without_alias():
     assert m.kind == "ambiguous" and set(labels(m)) == {"Living Room Door", "Garage Patio Door"}
 
 
-def test_living_room_fan_is_ambiguous(hub):
+def test_living_room_fan_is_ambiguous_without_preference(hub):
     m = hub.match("living room fan", "on")
     assert m.kind == "ambiguous" and set(labels(m)) == {"Living Room Ceiling Fan", "Living Room Exhaust Fan"}
+
+
+def test_fan_prefers_ceiling_fan():
+    h = Hubitat("x", "1", "t", fetch=FakeHub(), prefer=["ceiling fan"])
+    assert labels(h.match("the living room fan", "on")) == ["Living Room Ceiling Fan"]
+    assert labels(h.match("the living room exhaust fan", "on")) == ["Living Room Exhaust Fan"]
 
 
 def test_no_match(hub):
@@ -125,7 +131,7 @@ def test_handler_sends_commands(ctx, hub, say, calls):
 
 
 def test_handler_ambiguous_changes_nothing(ctx, hub):
-    res = h_home(route("Turn on the living room fan", ctx.cfg), ctx)
+    res = h_home(route("Turn off the living room fan", ctx.cfg), ctx)
     assert res.state == "refused" and hub.fake.calls == [] and ctx.notifier.sent[-1].title == "Which one?"
 
 

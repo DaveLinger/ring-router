@@ -414,7 +414,7 @@ def get_hubitat(ctx: Context):
     if _HUB is None or _HUB[0] != key:
         from .hubitat import Hubitat  # noqa: PLC0415
         _HUB = (key, Hubitat(hc["host"], str(hc["app_id"]), token, exclude=hc.get("exclude", []),
-                             aliases=hc.get("aliases", {})))
+                             aliases=hc.get("aliases", {}), prefer=hc.get("prefer", [])))
     return _HUB[1]
 
 

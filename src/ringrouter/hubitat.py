@@ -61,10 +61,12 @@ def _words(s: str) -> list[str]:
 
 class Hubitat:
     def __init__(self, host: str, app_id: str, token: str, *, exclude: list[str] | None = None,
-                 aliases: dict | None = None, fetch=None, cache_s: int = 300):
+                 aliases: dict | None = None, prefer: list[str] | None = None, fetch=None, cache_s: int = 300):
         self.base = f"http://{host}/apps/api/{app_id}"
         self.token, self.exclude = token, {e.lower() for e in (exclude or [])}
         self.aliases = {k.lower(): v for k, v in (aliases or {}).items()}
+        # tie-breakers when a name matches several devices, e.g. ["ceiling fan"]: "fan" -> the ceiling fan
+        self.prefer = [p.lower() for p in (prefer or [])]
         self._fetch = fetch or self._http
         self.cache_s, self._cache, self._cache_t = cache_s, None, 0.0
 
@@ -146,6 +148,10 @@ class Hubitat:
         best = scored[0]
         close = [s for s in scored if s[1] == best[1] and best[0] - s[0] < 0.15]
         if len(close) > 1:
+            for pref in self.prefer:
+                picked = [s[2] for s in close if pref in s[2].label.lower()]
+                if len(picked) == 1:
+                    return Match(picked, "device", f"preferred {pref!r}")
             return Match([s[2] for s in close[:4]], "ambiguous")
         return Match([best[2]], "device")
 
