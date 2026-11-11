@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>local.ring-router</string>
+    <key>CFBundleName</key><string>Ring Router</string>
+    <key>CFBundleDisplayName</key><string>Ring Router</string>
+    <key>CFBundleExecutable</key><string>RingRouter</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSUIElement</key><true/>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>NSLocalNetworkUsageDescription</key><string>Ring Router controls your Hubitat hub on the local network.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>Ring Router reads and adds calendar events you ask for by voice.</string>
+    <key>NSRemindersFullAccessUsageDescription</key><string>Ring Router reads and adds reminders you ask for by voice.</string>
+    <key>NSContactsUsageDescription</key><string>Ring Router looks up who to message and reads your home address from your contact card.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Ring Router sends iMessages and creates notes you ask for by voice.</string>
+    <key>NSLocationUsageDescription</key><string>Ring Router sets location-based reminders.</string>
+</dict>
+</plist>

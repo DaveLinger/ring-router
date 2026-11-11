@@ -10,6 +10,7 @@
     <string>local.ring-router.watchdog</string>
     <key>ProgramArguments</key>
     <array>
+        <string>/Users/dave/claude-mac-mini/ring-router/build/Ring Router.app/Contents/MacOS/RingRouter</string>
         <string>/Users/dave/claude-mac-mini/ring-router/.venv/bin/ring-router</string>
         <string>watchdog</string>
     </array>

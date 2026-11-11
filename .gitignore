@@ -6,3 +6,4 @@ config.toml
 .env
 profile.md
 vendor/node_modules/
+build/

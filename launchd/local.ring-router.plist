@@ -13,8 +13,10 @@
     <string>local.ring-router</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/dave/claude-mac-mini/ring-router/.venv/bin/ring-router</string>
-        <string>serve</string>
+        <!-- Ring Router.app (built by app/build.sh) gives the listener one stable macOS app
+             identity for privacy permissions (Local Network, Calendars, Contacts, ...). It runs
+             Contents/Resources/command.txt: .venv/bin/ring-router serve -->
+        <string>/Users/dave/claude-mac-mini/ring-router/build/Ring Router.app/Contents/MacOS/RingRouter</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/dave/claude-mac-mini/ring-router</string>

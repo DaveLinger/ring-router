@@ -125,6 +125,35 @@ def cmd_check_permissions(args) -> int:
             check=True, capture_output=True, text=True, timeout=120).stdout),
         ("Contacts", lambda: mcp.call_tool(cmd, "contacts_people", {"action": "search", "search": "Dave"})),
     ]
+    hub = cfg.section("hubitat")
+    if hub.get("host") and cfg.secret("hubitat_token"):
+        def hubitat_probe():
+            import json as _j  # noqa: PLC0415
+            import urllib.request as _u  # noqa: PLC0415
+            req = _u.Request(f"http://{hub['host']}/apps/api/{hub['app_id']}/devices",
+                             headers={"Authorization": f"Bearer {cfg.secret('hubitat_token')}"})
+            # Local Network privacy may not register for a process that fails and exits at once
+            # (Apple DTS): on failure, stay alive and retry before giving up.
+            last = None
+            for attempt in range(3):
+                try:
+                    with _u.urlopen(req, timeout=15) as r:
+                        return f"{len(_j.load(r))} devices visible (attempt {attempt + 1})"
+                except Exception as e:  # noqa: PERF203
+                    last = e
+                    time.sleep(10)
+            raise last
+        probes.append(("Hubitat (local network)", hubitat_probe))
+
+        def hubitat_curl_probe():
+            out = subprocess.run(["/usr/bin/curl", "-s", "-m", "10", "-o", "/dev/null", "-w", "%{http_code}",
+                                  "-H", f"Authorization: Bearer {cfg.secret('hubitat_token')}",
+                                  f"http://{hub['host']}/apps/api/{hub['app_id']}/devices"],
+                                 capture_output=True, text=True, timeout=20).stdout
+            if out != "200":
+                raise RuntimeError(f"curl HTTP {out or 'no response'}")
+            return "HTTP 200 via /usr/bin/curl"
+        probes.append(("Hubitat via curl", hubitat_curl_probe))
     rc = cfg.raw.get("recipients", {}).get(args.message_to) if args.message_to else None
     if rc:
         to = rc.get("handle")

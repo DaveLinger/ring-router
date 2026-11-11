@@ -126,6 +126,10 @@ remember_folder = "Remember"
 
 # --------------------------------------------------------------------- home --
 
+[hubitat]
+host = "192.168.1.10"          # hub's local IP
+app_id = "CHANGE-ME"           # Maker API app ID; token is RING_ROUTER_HUBITAT_TOKEN in .env
+
 [home]
 # Actions that need a Pushcut Send/Cancel tap before they run. Empty = everything runs as
 # spoken (the ring only listens while you hold the button). e.g. ["unlock", "open"]
