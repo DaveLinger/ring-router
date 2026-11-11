@@ -240,7 +240,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
 | Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
 | General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Live: read the real calendar, then moved an event as a follow-up |
-| Home control via Hubitat Maker API (lights, dimmers, fans, locks, rooms, scenes) | ✅ Built and matched against the real hub (24 devices); route still in dry run |
+| Home control via Hubitat Maker API (lights, dimmers, fans, locks, rooms, scenes) | ✅ Live: lights on, dim and off verified against the real hub |
 | HomeKit-only devices (e.g. the front door lock) | 🟡 HomeMCPBridge planned; waiting on Xcode |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
 | Activity page with per-command trace; watchdog down alert | ✅ Live |

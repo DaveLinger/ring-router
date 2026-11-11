@@ -263,7 +263,7 @@ includes HomeKit-native devices like the front door lock) comes via HomeMCPBridg
 
 | Backend | Covers | How | Status |
 | --- | --- | --- | --- |
-| **Hubitat Maker API** | Z-Wave devices on the hub (24 controllable) | Local HTTP to the hub, no MCP, no LLM | ✅ Built; matched against the real hub |
+| **Hubitat Maker API** | Z-Wave devices on the hub (24 controllable) | Local HTTP to the hub, no MCP, no LLM | ✅ Live (on, dim, off verified) |
 | **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | Everything in HomeKit, incl. HomeKit-native devices | Mac Catalyst app that *is* an MCP server; needs Xcode + Apple ID signing with the HomeKit entitlement | 🟡 Waiting on Xcode |
 
 **How a home command is resolved (deterministic, no LLM):**
@@ -381,7 +381,7 @@ Every route starts in dry run until you've watched it behave.
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Live to the test recipient; weak-match Send/Cancel works through the tunnel. Remaining: lift `live_recipients` |
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Live-tested with all four models and research (notes wait on the Notes permission) |
 | **4. Apple apps** ✅ | Notes, reminders, shopping list, calendar live; location reminders from the My Card address | "When I get home" verified on the iPhone |
-| **5. Home** 🟡 | Hubitat ✅ (matching, rooms, fans, dimmers, locks, scenes); HomeKit via HomeMCPBridge | Hubitat live test, then HomeKit once Xcode is installed |
+| **5. Home** 🟡 | Hubitat ✅ (matching, rooms, fans, dimmers, locks, scenes); HomeKit via HomeMCPBridge | Hubitat ✅ live; HomeKit next |
 | **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, `run_command`, tool/action guard | Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → research → Claude Code per host → Focus (experimental) | Each live in order |
 
