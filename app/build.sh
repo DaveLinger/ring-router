@@ -9,5 +9,9 @@ cp "$here/Info.plist" "$app/Contents/Info.plist"
 swiftc -O -o "$app/Contents/MacOS/RingRouter" "$here/launcher.swift"
 if (( $# )); then printf '%s\n' "$@" > "$app/Contents/Resources/command.txt"
 else printf '%s\n' "$repo/.venv/bin/ring-router" "serve" > "$app/Contents/Resources/command.txt"; fi
-codesign --force --sign - --identifier local.ring-router "$app"
+# Sign with an Apple Development certificate when one exists: macOS then tracks the app by
+# developer identity, so privacy grants survive rebuilds. Falls back to ad-hoc (grants reset on rebuild).
+ident=$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')
+codesign --force --sign "${ident:--}" --identifier local.ring-router --options runtime "$app"
+echo "Signed with: ${ident:-ad-hoc}"
 echo "Built: $app"

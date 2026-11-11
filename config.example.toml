@@ -143,6 +143,13 @@ exclude = []                  # device labels never to control (detectors/alarms
 aliases = { "back door" = "Back Door Lock" }
 prefer = ["ceiling fan"]       # tie-breaker when a name matches several devices
 
+[homekit]
+# HomeMCPBridge (patched build, see vendor/patches/). HomeKit-native devices only: devices whose
+# manufacturer is Hubitat are bridged duplicates and stay on the Maker API.
+command = ["vendor/HomeMCPBridge/build/Build/Products/Release-maccatalyst/HomeMCPBridge.app/Contents/MacOS/HomeMCPBridge"]
+homes = ["primary"]            # HomeKit homes to use ("primary" = your primary home)
+exclude_rooms = []      # rooms never controlled (e.g. cameras for another house)
+
 [home]
 # Actions that need a Pushcut Send/Cancel tap before they run. Empty = everything runs as
 # spoken (the ring only listens while you hold the button). e.g. ["unlock", "open"]

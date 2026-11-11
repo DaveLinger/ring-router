@@ -481,17 +481,23 @@ CMD_TO_ACTION = {"on": "on", "off": "off", "lock": "lock", "unlock": "unlock", "
 
 
 def get_hubitat(ctx: Context):
-    """Hubitat client from config, or None if not configured. Cached per process."""
+    """The home device catalog: Hubitat, HomeKit (HomeMCPBridge), or both combined.
+    None if neither is configured. Cached per process."""
     global _HUB
-    hc = ctx.cfg.section("hubitat")
+    hc, kc = ctx.cfg.section("hubitat"), ctx.cfg.section("homekit")
     token = ctx.cfg.secret("hubitat_token")
-    if not (hc.get("host") and hc.get("app_id") and token):
+    hub_ok = bool(hc.get("host") and hc.get("app_id") and token)
+    hk_ok = bool(kc.get("command"))
+    if not (hub_ok or hk_ok):
         return None
-    key = (hc.get("host"), str(hc.get("app_id")), token)
+    key = (hc.get("host"), str(hc.get("app_id")), token, tuple(kc.get("command", [])), tuple(kc.get("homes", [])))
     if _HUB is None or _HUB[0] != key:
+        from .homekit import Home, HomeKit  # noqa: PLC0415
         from .hubitat import Hubitat  # noqa: PLC0415
-        _HUB = (key, Hubitat(hc["host"], str(hc["app_id"]), token, exclude=hc.get("exclude", []),
-                             aliases=hc.get("aliases", {}), prefer=hc.get("prefer", [])))
+        hub = Hubitat(hc["host"], str(hc["app_id"]), token, exclude=hc.get("exclude", [])) if hub_ok else None
+        hk = HomeKit(kc["command"], homes=kc.get("homes"), exclude_rooms=kc.get("exclude_rooms", []),
+                     skip_manufacturers=kc.get("skip_manufacturers", ["Hubitat"])) if hk_ok else None
+        _HUB = (key, Home(hub, hk, aliases=hc.get("aliases", {}), prefer=hc.get("prefer", [])))
     return _HUB[1]
 
 
@@ -513,7 +519,7 @@ def run_home(ctx: Context, action: str, spoken: str, *, confirm: bool = False) -
         return Result("refused", f"no command for {action!r} {spoken!r}")
     m = hub.match(target, hact)
     ctx.trace("device_match", target=target, action=hact, command=cmd, value=value, kind=m.kind, note=m.note,
-              devices=[{"id": d.id, "label": d.label, "room": d.room} for d in m.devices])
+              devices=[{"id": d.id, "label": d.label, "room": d.room, "backend": d.backend} for d in m.devices])
     if m.kind == "none":
         ctx.notify("Not done", f"No device matching \u201c{target}\u201d.")
         return Result("refused", m.note or f"no device matching {target!r}")
@@ -547,7 +553,8 @@ def execute_home(ctx: Context, payload: dict, what: str | None = None) -> Result
         try:
             if dev is None:
                 raise RuntimeError("device no longer available")
-            ctx.trace("command", target="Hubitat Maker API", device=label, command=payload["cmd"],
+            ctx.trace("command", target="HomeKit (HomeMCPBridge)" if dev.backend == "homekit" else "Hubitat Maker API",
+                      device=label, command=payload["cmd"],
                       value=payload.get("value"))
             hub.command(dev, payload["cmd"], payload.get("value"))
             ctx.trace("command_result", device=label, ok=True)

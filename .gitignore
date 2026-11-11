@@ -7,3 +7,4 @@ config.toml
 profile.md
 vendor/node_modules/
 build/
+vendor/HomeMCPBridge/

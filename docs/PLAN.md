@@ -258,13 +258,22 @@ All model instructions live in [`prompts.toml`](../prompts.toml).
 
 ## Home automation
 
-Two backends behind one set of spoken names. **Hubitat** is built; **HomeKit** (the superset, which
-includes HomeKit-native devices like the front door lock) comes via HomeMCPBridge once Xcode is installed.
+Two backends behind one set of spoken names, combined into one catalog:
+- **Hubitat** for every device it has (direct local HTTP, via `/usr/bin/curl`, which macOS Local
+  Network privacy lets through reliably under Ring Router.app).
+- **HomeKit** (the superset) only for HomeKit-native devices. HomeKit entries whose manufacturer is
+  "Hubitat" are bridged duplicates and are skipped.
+- HomeMCPBridge is patched (`vendor/patches/HomeMCPBridge-ring-router.patch`): `HOMEMCP_HOMES`
+  limits it to one HomeKit home (`[homekit] homes = ["7 Aztec Court"]`; the other homes are invisible),
+  and devices are controlled by exact ID, since names repeat. `[homekit] exclude_rooms` hides rooms
+  such as "Mom's House" (another property's cameras filed under this home).
+- Ring Router.app is signed with the Apple Development identity and carries `NSHomeKitUsageDescription`.
+  Without it, macOS kills HomeMCPBridge when it asks for HomeKit, because Ring Router is the responsible app.
 
 | Backend | Covers | How | Status |
 | --- | --- | --- | --- |
 | **Hubitat Maker API** | Z-Wave devices on the hub (24 controllable) | Local HTTP to the hub, no MCP, no LLM | ✅ Live (on, dim, off verified) |
-| **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | Everything in HomeKit, incl. HomeKit-native devices | Mac Catalyst app that *is* an MCP server; needs Xcode + Apple ID signing with the HomeKit entitlement | 🟡 Waiting on Xcode |
+| **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | HomeKit-native devices (front door lock, garage doors, fireplaces, outlets…) | Mac Catalyst MCP server, built locally and signed with a free Personal Team (HomeKit entitlement works) | ✅ Live |
 
 **How a home command is resolved (deterministic, no LLM):**
 
@@ -365,7 +374,7 @@ Anyone who could fake this webhook could text your contacts or unlock your door.
 | Automation (Messages, Notes, Contacts) | Sending iMessages, creating notes, reading the My Card address | ✅ granted to Ring Router |
 | Reminders, Calendars (Full Access), Contacts | macos-mcp EventKit tools, location helper | ✅ granted to Ring Router |
 | Local Network | Hubitat Maker API on the LAN | ✅ granted to Ring Router |
-| HomeKit | HomeMCPBridge | 5 (pending Xcode) |
+| HomeKit | HomeMCPBridge (via Ring Router) | ✅ granted |
 | Full Disk Access | Reading Messages (general agent, tier 3b) | later, optional |
 
 ---
@@ -381,7 +390,7 @@ Every route starts in dry run until you've watched it behave.
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Live to the test recipient; weak-match Send/Cancel works through the tunnel. Remaining: lift `live_recipients` |
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Live-tested with all four models and research (notes wait on the Notes permission) |
 | **4. Apple apps** ✅ | Notes, reminders, shopping list, calendar live; location reminders from the My Card address | "When I get home" verified on the iPhone |
-| **5. Home** 🟡 | Hubitat ✅ (matching, rooms, fans, dimmers, locks, scenes); HomeKit via HomeMCPBridge | Hubitat ✅ live; HomeKit next |
+| **5. Home** ✅ | Hubitat + HomeKit (HomeMCPBridge) in one catalog: matching, rooms, fans, dimmers, locks, garage doors, scenes | Both backends live-tested |
 | **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, `run_command`, tool/action guard | Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → research → Claude Code per host → Focus (experimental) | Each live in order |
 

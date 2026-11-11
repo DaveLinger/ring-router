@@ -77,6 +77,7 @@ shopping lists, and reading dates out of reminders and events.
 | *"Set the master bedroom fan to low"* / *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
 | *"Turn on the living room fan"* | 🌀 "Fan" means the ceiling fan when several match; otherwise it asks "Which one?" |
 | *"Lock the garage patio door"* | 🔒 Locks run as spoken (confirm-first is opt-in) |
+| *"Unlock the front door"* / *"Open the front garage door"* | 🏠 HomeKit-native devices via HomeMCPBridge |
 | *"Remind me when I get home to take out the trash"* | 📍 Geofenced reminder at the address on your Contacts card |
 | *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Web-backed answer as a notification, full text + sources a tap away |
 | *"Ask DeepSeek more about that"* | 🤖 Continues the same conversation (within 10 minutes) |
@@ -241,7 +242,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
 | General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Live: read the real calendar, then moved an event as a follow-up |
 | Home control via Hubitat Maker API (lights, dimmers, fans, locks, rooms, scenes) | ✅ Live: lights on, dim and off verified against the real hub |
-| HomeKit-only devices (e.g. the front door lock) | 🟡 HomeMCPBridge planned; waiting on Xcode |
+| HomeKit-only devices (front door lock, garage doors, fireplaces, outlets…) | ✅ Live via a patched HomeMCPBridge, limited to one HomeKit home |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
 | Activity page with per-command trace; watchdog down alert | ✅ Live |
 | Ring Router.app (one macOS identity for all permissions) | ✅ Running the listener; all permissions verified |
@@ -279,7 +280,7 @@ ring-router/
 ├── app/               # Ring Router.app launcher (Swift) + Info.plist + build.sh
 ├── helpers/georeminder/  # Swift: geocode + EventKit location reminder
 ├── launchd/           # service, watchdog and permission-check jobs
-├── vendor/            # pinned mcp-macos (node_modules git-ignored)
+├── vendor/            # pinned mcp-macos + HomeMCPBridge build script and patches (sources git-ignored)
 ├── tests/             # phrases.toml answer key + protocol, server, agent, hubitat, live-model tests
 ├── docs/PLAN.md       # build plan and decisions
 ├── prompts.toml       # all model instructions

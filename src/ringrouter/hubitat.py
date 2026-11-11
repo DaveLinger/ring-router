@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ class Device:
     room: str
     caps: set[str]
     attrs: dict = field(default_factory=dict)
+    backend: str = "hubitat"          # hubitat | homekit
 
     @property
     def is_light(self) -> bool:
@@ -59,22 +61,49 @@ def _words(s: str) -> list[str]:
     return out
 
 
-class Hubitat:
-    def __init__(self, host: str, app_id: str, token: str, *, exclude: list[str] | None = None,
-                 aliases: dict | None = None, prefer: list[str] | None = None, fetch=None, cache_s: int = 300):
-        self.base = f"http://{host}/apps/api/{app_id}"
-        self.token, self.exclude = token, {e.lower() for e in (exclude or [])}
+class Catalog:
+    """Spoken-name matching over a device list (Hubitat, HomeKit, or both combined)."""
+
+    def __init__(self, *, aliases: dict | None = None, prefer: list[str] | None = None):
         self.aliases = {k.lower(): v for k, v in (aliases or {}).items()}
         # tie-breakers when a name matches several devices, e.g. ["ceiling fan"]: "fan" -> the ceiling fan
         self.prefer = [p.lower() for p in (prefer or [])]
+
+    def devices(self, refresh: bool = False) -> list[Device]:
+        raise NotImplementedError
+
+    def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
+        raise NotImplementedError
+
+    def rooms(self) -> set[str]:
+        return {d.room for d in self.devices() if d.room}
+
+    def match(self, target: str, action: str) -> "Match":
+        return _match(self, target, action)
+
+
+class Hubitat(Catalog):
+    def __init__(self, host: str, app_id: str, token: str, *, exclude: list[str] | None = None,
+                 aliases: dict | None = None, prefer: list[str] | None = None, fetch=None, cache_s: int = 300):
+        super().__init__(aliases=aliases, prefer=prefer)
+        self.base = f"http://{host}/apps/api/{app_id}"
+        self.token, self.exclude = token, {e.lower() for e in (exclude or [])}
         self._fetch = fetch or self._http
         self.cache_s, self._cache, self._cache_t = cache_s, None, 0.0
 
     # -- transport ---------------------------------------------------------
     def _http(self, path: str):
-        req = urllib.request.Request(self.base + path, headers={"Authorization": f"Bearer {self.token}"})
-        with urllib.request.urlopen(req, timeout=15) as r:
-            body = r.read().decode()
+        """GET via /usr/bin/curl. macOS Local Network privacy tracks grants unreliably for a
+        launchd-run Python ("No route to host"), while Apple's curl under Ring Router.app gets
+        through consistently. The token goes in via stdin config, not argv (not visible in ps)."""
+        cfg = f'header = "Authorization: Bearer {self.token}"\n'
+        p = subprocess.run(["/usr/bin/curl", "-sS", "-m", "15", "-K", "-", "-w", "\n%{http_code}", self.base + path],
+                           input=cfg, capture_output=True, text=True, timeout=20)
+        if p.returncode != 0:
+            raise RuntimeError(f"Hubitat unreachable: {p.stderr.strip() or 'curl exit ' + str(p.returncode)}")
+        body, _, code = p.stdout.rpartition("\n")
+        if code != "200":
+            raise RuntimeError(f"Hubitat HTTP {code}: {body[:200]}")
         return json.loads(body) if body.strip() else {}
 
     # -- devices -------------------------------------------------------------
@@ -92,75 +121,72 @@ class Hubitat:
             self._cache, self._cache_t = out, time.time()
         return self._cache
 
-    def rooms(self) -> set[str]:
-        return {d.room for d in self.devices() if d.room}
-
-    # -- matching ----------------------------------------------------------
-    def match(self, target: str, action: str) -> Match:
-        """Find the device(s) a spoken target means, for an action."""
-        need = ACTION_CAPS.get(action)
-        pool = [d for d in self.devices() if not need or need in d.caps or
-                (need == "DoorControl" and "GarageDoorControl" in d.caps)]
-        t = target.lower().strip()
-        tw = _words(t)
-        if not tw:
-            return Match([], "none", "no device named")
-
-        alias = self.aliases.get(re.sub(r"^(the|my)\s+", "", t))
-        if alias:
-            hits = [d for d in pool if d.label.lower() == alias.lower()]
-            if hits:
-                return Match(hits, "device", f"alias {t!r}")
-
-        # "all the lights" / "the lights" / "everything"
-        everything = tw == ["everything"]
-        if everything or (t.startswith(("all ", "every ")) and tw == ["light"]):
-            hits = [d for d in pool if everything or d.is_light]
-            return Match(hits, "all" if hits else "none", "everything" if everything else "all lights")
-
-        # exact label
-        exact = [d for d in pool if _words(d.label) == tw]
-        if len(exact) == 1:
-            return Match(exact, "device")
-
-        # room + lights ("the living room lights", "living room")
-        for room in sorted(self.rooms(), key=len, reverse=True):
-            rw = _words(room)
-            if rw and tw[:len(rw)] == rw:
-                rest = tw[len(rw):]
-                in_room = [d for d in pool if d.room == room]
-                if rest in ([], ["light"]) and action in ("on", "off", "level"):
-                    lights = [d for d in in_room if d.is_light]
-                    if t.endswith("lights") or rest == [] or len(lights) == 1:
-                        if lights:
-                            return Match(lights, "room", f"lights in {room}")
-
-        # word-overlap scoring
-        scored = []
-        for d in pool:
-            lw = set(_words(d.label)) | set(_words(d.room))
-            overlap = sum(1 for w in tw if w in lw) / len(tw)
-            score = overlap + 0.25 * similarity(" ".join(tw), " ".join(_words(d.label)))
-            scored.append((score, overlap, d))
-        scored.sort(key=lambda x: -x[0])
-        if not scored or scored[0][1] < 0.6:
-            return Match([], "none", f"no device matching {target!r}")
-        best = scored[0]
-        close = [s for s in scored if s[1] == best[1] and best[0] - s[0] < 0.15]
-        if len(close) > 1:
-            for pref in self.prefer:
-                picked = [s[2] for s in close if pref in s[2].label.lower()]
-                if len(picked) == 1:
-                    return Match(picked, "device", f"preferred {pref!r}")
-            return Match([s[2] for s in close[:4]], "ambiguous")
-        return Match([best[2]], "device")
-
     # -- commands ------------------------------------------------------------
     def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
         path = f"/devices/{device.id}/{cmd}" + (f"/{urllib.request.quote(str(value))}" if value is not None else "")
         out = self._fetch(path)
         self._cache = None          # state changed
         return out
+
+
+def _match(self, target: str, action: str) -> Match:
+    """Find the device(s) a spoken target means, for an action."""
+    need = ACTION_CAPS.get(action)
+    pool = [d for d in self.devices() if not need or need in d.caps or
+            (need == "DoorControl" and "GarageDoorControl" in d.caps)]
+    t = target.lower().strip()
+    tw = _words(t)
+    if not tw:
+        return Match([], "none", "no device named")
+
+    alias = self.aliases.get(re.sub(r"^(the|my)\s+", "", t))
+    if alias:
+        hits = [d for d in pool if d.label.lower() == alias.lower()]
+        if hits:
+            return Match(hits, "device", f"alias {t!r}")
+
+    # "all the lights" / "the lights" / "everything"
+    everything = tw == ["everything"]
+    if everything or (t.startswith(("all ", "every ")) and tw == ["light"]):
+        hits = [d for d in pool if everything or d.is_light]
+        return Match(hits, "all" if hits else "none", "everything" if everything else "all lights")
+
+    # exact label
+    exact = [d for d in pool if _words(d.label) == tw]
+    if len(exact) == 1:
+        return Match(exact, "device")
+
+    # room + lights ("the living room lights", "living room")
+    for room in sorted(self.rooms(), key=len, reverse=True):
+        rw = _words(room)
+        if rw and tw[:len(rw)] == rw:
+            rest = tw[len(rw):]
+            in_room = [d for d in pool if d.room == room]
+            if rest in ([], ["light"]) and action in ("on", "off", "level"):
+                lights = [d for d in in_room if d.is_light]
+                if t.endswith("lights") or rest == [] or len(lights) == 1:
+                    if lights:
+                        return Match(lights, "room", f"lights in {room}")
+
+    # word-overlap scoring
+    scored = []
+    for d in pool:
+        lw = set(_words(d.label)) | set(_words(d.room))
+        overlap = sum(1 for w in tw if w in lw) / len(tw)
+        score = overlap + 0.25 * similarity(" ".join(tw), " ".join(_words(d.label)))
+        scored.append((score, overlap, d))
+    scored.sort(key=lambda x: -x[0])
+    if not scored or scored[0][1] < 0.6:
+        return Match([], "none", f"no device matching {target!r}")
+    best = scored[0]
+    close = [s for s in scored if s[1] == best[1] and best[0] - s[0] < 0.15]
+    if len(close) > 1:
+        for pref in self.prefer:
+            picked = [s[2] for s in close if pref in s[2].label.lower()]
+            if len(picked) == 1:
+                return Match(picked, "device", f"preferred {pref!r}")
+        return Match([s[2] for s in close[:4]], "ambiguous")
+    return Match([best[2]], "device")
 
 
 def parse_value(action: str, rest: str) -> tuple[str, str | None]:
