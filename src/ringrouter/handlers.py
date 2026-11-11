@@ -6,17 +6,21 @@ Dry-run is enforced here: in dry run a handler does everything up to the side ef
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
 
 from . import md, mcp
+from .config import PROJECT_DIR
 from .fm import FM, checked_rewrite
 from .llm import LLMStore, OpenRouter, Reply, load_profile
 from .notify import Button, Notice
 from .prompts import prompt
 from .router import Route, route
+from .text import capitalize_first
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -46,6 +50,7 @@ class Context:
     notes_writer: Callable = field(default=None)   # (title, html, folder) -> None
     agent_runner: Callable = field(default=None)   # (kind, request, cfg, history, rerouter) -> (text, AgentSpec)
     hubitat_factory: Callable = field(default=None)  # (ctx) -> Hubitat | None
+    address_lookup: Callable = field(default=None)   # () -> home address (Contacts My Card)
 
     def __post_init__(self):
         if self.mcp_call is None:
@@ -61,6 +66,8 @@ class Context:
             self.agent_runner = _default_agent_runner
         if self.hubitat_factory is None:
             self.hubitat_factory = get_hubitat
+        if self.address_lookup is None:
+            self.address_lookup = my_card_address
         # Tracing wrappers: every side effect and model call lands in the activity trace.
         self.mcp_call = _traced_mcp(self, self.mcp_call)
         self.notes_writer = _traced_notes(self, self.notes_writer)
@@ -325,11 +332,80 @@ REMINDER_SCHEMA = {"title": "Reminder", "type": "object", "additionalProperties"
                                           "Local due time 'YYYY-MM-DD HH:mm:ss', or empty if none was said"}}}
 
 
-def h_reminder(r: Route, ctx: Context) -> Result:
-    if r.params.get("location_trigger"):
-        msg = "Location reminders (“when I get home”) aren't built yet."
+MY_CARD_SCRIPT = """tell application "Contacts"
+  set out to ""
+  repeat with a in (addresses of my card)
+    set out to out & (label of a) & "|" & (street of a) & "|" & (city of a) & "|" & (state of a) & "|" & (zip of a) & linefeed
+  end repeat
+  return out
+end tell"""
+
+GEO_PATTERNS = [  # (regex on the reminder text, place, proximity)
+    (r"\bwhen i (?:get|arrive|come|am|'m)\s+(?:back\s+)?home\b|\bwhen i get back\b|\bwhen i arrive\b", "home", "enter"),
+    (r"\bwhen i (?:leave|head out|walk out)(?:\s+(?:the\s+)?(?:home|house))?\b", "home", "leave"),
+]
+
+
+def my_card_address() -> str:
+    """Home address from the Contacts 'My Card' (label 'home' preferred). Read fresh every time."""
+    out = subprocess.run(["/usr/bin/osascript", "-e", MY_CARD_SCRIPT], capture_output=True, text=True,
+                         timeout=30, check=True).stdout
+    rows = [line.split("|") for line in out.splitlines() if line.count("|") == 4]
+    if not rows:
+        raise RuntimeError("no address on your My Card in Contacts")
+    rows.sort(key=lambda r: 0 if "home" in r[0].lower() else 1)
+    label, street, city, state, zip_ = (x.strip() for x in rows[0])
+    return ", ".join(p for p in (street, city, f"{state} {zip_}".strip()) if p and p != "missing value")
+
+
+def parse_geo(body: str) -> tuple[str, str, str] | None:
+    """'when I get home to take out the trash' -> ('Take out the trash', 'home', 'enter')."""
+    for pat, place, prox in GEO_PATTERNS:
+        m = re.search(pat, body, re.IGNORECASE)
+        if m:
+            title = (body[:m.start()] + " " + body[m.end():]).strip(" ,.")
+            title = re.sub(r"^(?:to|that|about)\s+", "", title, flags=re.IGNORECASE).strip()
+            return capitalize_first(title), place, prox
+    return None
+
+
+def h_geo_reminder(r: Route, ctx: Context) -> Result:
+    parsed = parse_geo(r.body)
+    if not parsed or not parsed[0]:
+        msg = "Only “when I get home” / “when I leave” reminders are supported."
         ctx.notify("Not done", msg)
         return Result("refused", msg)
+    title, place, prox = parsed
+    try:
+        address = ctx.address_lookup()
+    except Exception as e:
+        ctx.notify("Not done", f"Couldn't read your home address from Contacts: {e}")
+        return Result("failed", f"my card address: {e}")
+    when = "arrive home" if prox == "enter" else "leave home"
+    ctx.trace("geo_reminder", title=title, place=place, proximity=prox, address_source="Contacts My Card")
+    if ctx.dry("reminder"):
+        ctx.notify("Dry run", f"Would remind you to “{title}” when you {when}")
+        return Result("dry_run", f"DRY RUN: would create {prox} geofence reminder {title!r}")
+    helper = ctx.cfg.section("reminders").get("georeminder", str(PROJECT_DIR / "build" / "georeminder"))
+    cmd = [helper, "--title", title, "--address", address, "--proximity", prox, "--place", "Home",
+           "--radius", str(ctx.cfg.section("reminders").get("geofence_radius_m", 100))]
+    ctx.trace("command", target="georeminder (EventKit)", title=title, proximity=prox, place="Home (My Card)")
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    try:
+        out = json.loads(p.stdout.strip().splitlines()[-1])
+    except Exception:
+        out = {"ok": False, "error": (p.stderr or p.stdout or "no output").strip()[:300]}
+    ctx.trace("command_result", ok=out.get("ok"), **{k: v for k, v in out.items() if k not in ("ok", "lat", "lon")})
+    if not out.get("ok"):
+        ctx.notify("Not done", f"Location reminder failed: {out.get('error')}")
+        return Result("failed", f"georeminder: {out.get('error')}", 422)
+    ctx.notify("Reminder set", f"{title}: when you {when}")
+    return Result("done", f"geofence reminder {title!r} ({prox} home, list {out.get('list')!r})")
+
+
+def h_reminder(r: Route, ctx: Context) -> Result:
+    if r.params.get("location_trigger"):
+        return h_geo_reminder(r, ctx)
     try:
         data = ctx.fm.extract(r.body, prompt("reminder_extract"), REMINDER_SCHEMA)
     except Exception as e:

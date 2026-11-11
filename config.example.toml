@@ -110,6 +110,14 @@ workdir = "~"
 reminders_list = "Shopping list"
 spoken = ["shopping list", "grocery list", "groceries list", "groceries", "shopping"]
 
+# ---------------------------------------------------------------- reminders --
+
+[reminders]
+# "Remind me when I get home / when I leave": home = the address on your Contacts "My Card",
+# read fresh each time (geocoded by Apple); the geofence syncs to your iPhone via iCloud.
+geofence_radius_m = 100
+# georeminder = "build/georeminder"   # helper binary (built by helpers/georeminder/build.sh)
+
 # ----------------------------------------------------------------- calendars --
 
 [calendars]
