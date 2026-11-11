@@ -74,6 +74,7 @@ def test_agent_answers_questions_from_read_tools(cfg):
     text, spec = run_agent("general", "What's on my calendar Tuesday?", cfg, model=model, mcp_source=mcp)
     assert seen["tools"] == ["calendar_events", "contacts_people", "reminders_tasks", "web_search"]  # no mail/messages
     assert executed == [("calendar_events", "read", "")] and "Dentist" in text
+    assert "Dentist" in spec.calls[0]["output"]           # tool result recorded for the activity trace
 
 
 def test_agent_messages_read_opt_in_but_never_send(cfg):

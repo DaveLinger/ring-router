@@ -70,10 +70,14 @@ shopping lists, and reading dates out of reminders and events.
 | *"Remember I parked on level 3, row G"* | 📝 Saved to the **Remember** folder |
 | *"Add milk, eggs and mac and cheese to my shopping list"* | 🛒 Three reminders: Milk · Eggs · Mac and cheese |
 | *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder due tomorrow 17:00 |
+| *"Add ring-router test event tomorrow at 3pm to my calendar"* | 📅 One-hour event on your default calendar |
 | *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on Tuesday at 15:00 |
 | *"Add date night Friday at 7 to our calendar"* | 📅 Goes on the shared calendar (spoken names map to calendars in config) |
-| *"Turn on the living room light"* | 💡 Hubitat or HomeKit |
-| *"Unlock the front door"* | 🔓 Unlocks it (or asks first, if you turn that on) |
+| *"Turn off the living room lights"* | 💡 Every light in that room, via Hubitat |
+| *"Set the master bedroom fan to low"* / *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
+| *"Turn on the living room fan"* | 🌀 "Fan" means the ceiling fan when several match; otherwise it asks "Which one?" |
+| *"Lock the garage patio door"* | 🔒 Locks run as spoken (confirm-first is opt-in) |
+| *"Remind me when I get home to take out the trash"* | 📍 Geofenced reminder at the address on your Contacts card |
 | *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Web-backed answer as a notification, full text + sources a tap away |
 | *"Ask DeepSeek more about that"* | 🤖 Continues the same conversation (within 10 minutes) |
 | *"Research the best robot vacuum under $500"* | 🔎 A research note in Apple Notes |
@@ -124,21 +128,47 @@ cp config.example.toml config.toml   # recipients, models, hosts, lists... (git-
 ### Run it as a service
 
 ```sh
-cp launchd/local.ring-router.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.plist   # starts now and at login
-launchctl kickstart -k gui/$(id -u)/local.ring-router                             # restart after changes
-tailscale funnel --bg 8642                                                         # public HTTPS address
+app/build.sh                         # builds build/Ring Router.app (see below)
+helpers/georeminder/build.sh         # builds build/georeminder (location reminders)
+cp launchd/local.ring-router.plist launchd/local.ring-router.watchdog.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.plist           # listener: now and at login
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.watchdog.plist  # down alert every 5 min
+launchctl kickstart -k gui/$(id -u)/local.ring-router                                     # restart after changes
+tailscale funnel --bg 8642                                                                 # public HTTPS address
 ```
 
-Set `[server] public_url` to the Funnel address so notification buttons and answer pages work from
-your phone. Logs go to `~/Library/Logs/ring-router.log`.
+Set `[server] public_url` to the Funnel address so notification buttons, answer pages and the
+activity page work from your phone. Logs: `~/Library/Logs/ring-router.log` (and `-watchdog.log`).
 
-macOS ties privacy permissions to the program that asked, so trigger them from the service's own
-context: `launchctl bootstrap gui/$(id -u) launchd/local.ring-router.permcheck.plist` runs
-`ring-router check-permissions` (Calendars needs **Full Access**, not "Add Events Only").
+<details>
+<summary><b>Why "Ring Router.app", and granting macOS permissions</b></summary>
+
+macOS grants privacy permissions (Local Network, Calendars, Reminders, Contacts, Automation) to the
+*responsible app*. A Homebrew Python started by launchd has no app identity, so macOS Local Network
+privacy silently blocks it ("No route to host" to the Hubitat hub). `app/` builds a tiny signed
+launcher bundle, **Ring Router.app** (`local.ring-router`), that starts the listener as a child and
+stays its parent. Every permission then lives under one "Ring Router" entry in System Settings, and
+survives Homebrew Python upgrades.
+
+To trigger and verify all prompts from that same context:
+`launchctl bootstrap gui/$(id -u) launchd/local.ring-router.permcheck.plist` runs
+`ring-router check-permissions` (log: `~/Library/Logs/ring-router-permcheck.log`). Calendars needs
+**Full Access**, not "Add Events Only".
 
 mcp-macos is vendored in `vendor/` because npm now blocks the install script that compiles its
 EventKit helper: `cd vendor && npm install && (cd node_modules/mcp-macos && node scripts/build-swift.mjs)`.
+</details>
+
+### Activity page and down alert
+
+- **`/activity/<activity_token>`** (token in `.env`): recent commands with outcome and model cost.
+  Tap one for its **step-by-step trace**: request metadata, exact transcript, cleaned text, route
+  decision, on-device model input → output, composed message, model request and reply, every agent
+  tool call with its result, device matches, each command sent to macOS/Hubitat with its result,
+  notifications, and the HTTP response the Pebble app saw. Kept 90 days (`retention_days`).
+- **Watchdog** (`ring-router watchdog`, every 5 minutes via launchd): checks the listener locally
+  and through the tunnel; Pushcut alert after two failed checks ("listener down" vs "tunnel down")
+  and once on recovery. It runs on the same Mac, so it can't report the Mac itself being off.
 
 ### Configuration
 
@@ -162,6 +192,9 @@ Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_
 | `ring-router sim "phrase" …` | Send phrases to the running listener exactly as the ring would |
 | `ring-router sim --file tests/phrases.toml` | Send the whole phrase list |
 | `ring-router recent` | Show recent deliveries |
+| `ring-router check-permissions` | Touch each macOS app and Hubitat once (run via the permcheck launchd job) |
+| `ring-router watchdog` | One health check; Pushcut alert on change |
+| `ring-router init` | Generate the path token, signing secret and activity token in `.env` |
 
 ---
 
@@ -181,7 +214,7 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
 Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
 
 ```sh
-.venv/bin/pytest -q               # everything (164 tests)
+.venv/bin/pytest -q               # everything (212 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: checks the exact text each message sends
 ```
@@ -199,13 +232,18 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 164 tests | ✅ Done |
+| Ring simulator, phrase answer key, 212 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live: text, note, shopping item, reminder and event created end to end through the tunnel |
 | Pushcut notifications and buttons | ✅ Delivered; Send/Cancel and Full answer verified through the tunnel |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
 | Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
 | General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Live: read the real calendar, then moved an event as a follow-up |
-| Home, Claude Code per host, location reminders | ⬜ Stubs that report what they'd do |
+| Home control via Hubitat Maker API (lights, dimmers, fans, locks, rooms, scenes) | ✅ Built and matched against the real hub (24 devices); route still in dry run |
+| HomeKit-only devices (e.g. the front door lock) | 🟡 HomeMCPBridge planned; waiting on Xcode |
+| Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
+| Activity page with per-command trace; watchdog down alert | ✅ Live |
+| Ring Router.app (one macOS identity for all permissions) | ✅ Running the listener; all permissions verified |
+| Claude Code per host | ⬜ Stub; needs SSH to the VPS |
 | Tailscale Funnel tunnel, launchd service | ✅ Running; buttons and answer pages work from the phone |
 
 See the **[build plan](docs/PLAN.md)** for the full design, decisions, and phase-by-phase roadmap.
@@ -226,14 +264,21 @@ ring-router/
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
 │   ├── agents.py      # the general agent (Pydantic AI, web search, tool/action guard)
+│   ├── hubitat.py     # Hubitat Maker API: devices, spoken-name matching, commands
+│   ├── activity.py    # activity page + per-command trace view
+│   ├── watchdog.py    # down alert
 │   ├── md.py          # Markdown → HTML for the answer page and research notes
 │   ├── mcp.py         # minimal stdio MCP client for mcp-macos
 │   ├── notify.py      # console + Pushcut notifiers
-│   ├── store.py       # SQLite: deliveries + pending confirmations
+│   ├── store.py       # SQLite: deliveries, trace, pending confirmations
 │   ├── prompts.py     # loads prompts.toml
 │   ├── config.py      # config.toml + .env
 │   └── cli.py         # ring-router command
-├── tests/             # phrases.toml answer key + protocol, server, live-model tests
+├── app/               # Ring Router.app launcher (Swift) + Info.plist + build.sh
+├── helpers/georeminder/  # Swift: geocode + EventKit location reminder
+├── launchd/           # service, watchdog and permission-check jobs
+├── vendor/            # pinned mcp-macos (node_modules git-ignored)
+├── tests/             # phrases.toml answer key + protocol, server, agent, hubitat, live-model tests
 ├── docs/PLAN.md       # build plan and decisions
 ├── prompts.toml       # all model instructions
 ├── config.example.toml

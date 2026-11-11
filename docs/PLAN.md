@@ -157,7 +157,7 @@ Names match by spelling **and** sound. "Hey X" / "X, …" is direct speech (sent
 | 6a | "Remind me at 5 to call the vet" | Extract title + due time | on-device | macos-mcp `reminders_tasks` |
 | 6b | "Remind me when I get home to…" | Location trigger | on-device | Custom Swift EventKit helper (macos-mcp can't) |
 | 7 | "Add dentist Tuesday at 3 to my calendar" | Extract title, time, calendar | on-device | macos-mcp `calendar_events` |
-| 8 | "Turn on the living room light" | Device alias + action | cheap | Hubitat Maker API or HomeMCPBridge |
+| 8 | "Turn off the living room lights" | Device/room match + action (deterministic) | none | Hubitat Maker API; HomeMCPBridge for HomeKit-native |
 | 9 | "Ask ChatGPT / Claude / DeepSeek / Qwen …" | Prefix picks the model | yes | OpenRouter |
 | — | anything else (questions too) | General agent | yes | Pydantic AI on OpenRouter + macos-mcp + web search |
 
@@ -258,21 +258,46 @@ All model instructions live in [`prompts.toml`](../prompts.toml).
 
 ## Home automation
 
-One device alias table, two backends:
+Two backends behind one set of spoken names. **Hubitat** is built; **HomeKit** (the superset, which
+includes HomeKit-native devices like the front door lock) comes via HomeMCPBridge once Xcode is installed.
 
-| Backend | Covers | How | Strengths | Limits |
-| --- | --- | --- | --- | --- |
-| **Hubitat Maker API** | Z-Wave devices on the hub | Local HTTP, no MCP | Direct, predictable | Hubitat devices only |
-| **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | Everything in HomeKit | MCP over stdio | Sees every device; locks, garage | Thermostats read-only; young project |
+| Backend | Covers | How | Status |
+| --- | --- | --- | --- |
+| **Hubitat Maker API** | Z-Wave devices on the hub (24 controllable) | Local HTTP to the hub, no MCP, no LLM | ✅ Built; matched against the real hub |
+| **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | Everything in HomeKit, incl. HomeKit-native devices | Mac Catalyst app that *is* an MCP server; needs Xcode + Apple ID signing with the HomeKit entitlement | 🟡 Waiting on Xcode |
 
-- Each alias names a device and preferred backend; `force_backend` A/B-tests the two paths.
-- A cheap model only resolves alias + action; it never controls devices freely.
+**How a home command is resolved (deterministic, no LLM):**
+
+1. The router's verb gives the action (`turn on/off`, `set … to`, `dim`, `brighten`, `lock`, `unlock`).
+   `set the fan to low` → `setSpeed low`; `dim the sconces to 20%` → `setLevel 20`.
+2. Candidates are narrowed by the capability the action needs: unlock considers only locks, fan speed only fans.
+3. The spoken target is matched: `[hubitat] aliases` → exact label → room + "lights"
+   ("the living room lights" = every light in that room) → "all the lights" → word overlap.
+4. If several devices tie, `[hubitat] prefer` breaks it (`["ceiling fan"]`: "the living room fan" →
+   Living Room Ceiling Fan). Still tied → **"Which one?"** notification and nothing changes.
+5. Sensors, remotes and anything that looks like a detector, alarm or siren are never controllable.
 
 | Action | Behavior |
 | --- | --- |
-| Lights, fans, switches, "lock" | Run immediately, then notify |
+| Lights, fans, switches, locks | Run immediately, then notify |
 | Actions in `[home] confirm_actions` | Need a Pushcut tap first. **Empty by default**: the ring only listens while you hold the button, so unlock and garage-open run as spoken |
-| Not recognized | Nothing happens; you're told what was heard |
+| Not recognized / ambiguous | Nothing happens; you're told what was heard and the candidates |
+
+**Scenes** (exact phrase, e.g. "Goodnight") run a configured list of the same device actions.
+
+---
+
+## Activity page and down alert
+
+- **Activity page** (`/activity/<activity_token>` through the tunnel): recent commands with outcome and
+  model cost; each opens a **step-by-step trace**: request metadata, exact transcript, cleaned text,
+  route decision, on-device model input → output, composed message, model request and reply, every
+  agent tool call with its result, device matches, each command sent (mcp-macos, AppleScript,
+  Hubitat, georeminder) with its result, notifications, result, and the HTTP response the Pebble app
+  saw. Kept 90 days.
+- **Watchdog** (launchd, every 5 minutes): checks the listener locally and through the tunnel;
+  Pushcut alert after two failures ("listener down" vs "tunnel down") and on recovery. It can't
+  report the Mac itself being off.
 
 ---
 
@@ -329,12 +354,18 @@ Anyone who could fake this webhook could text your contacts or unlock your door.
 - Pushcut callbacks use one-time tokens; refusals log the reason but return no detail.
 - **Secrets** live in a git-ignored `.env` (mode 600) and are never logged. Real recipients and chat IDs
   live in the git-ignored `config.toml`.
+- The activity page sits behind its own unguessable token (`activity_token`), since it shows transcripts.
+- **One macOS identity:** the listener runs inside **Ring Router.app**, a tiny signed launcher bundle
+  (`local.ring-router`), so every privacy grant lives under "Ring Router" and survives Python upgrades.
+  This was required for Local Network access: macOS silently blocks a launchd-run Homebrew Python from
+  reaching LAN devices ("No route to host"), a known Sequoia-era behavior.
 
 | Permission | Needed for | Phase |
 | --- | --- | --- |
-| Automation (Messages, Notes) | Sending iMessages, creating notes | 2 |
-| Reminders, Calendars | macos-mcp EventKit tools, location helper | 4 |
-| HomeKit | HomeMCPBridge | 5 |
+| Automation (Messages, Notes, Contacts) | Sending iMessages, creating notes, reading the My Card address | ✅ granted to Ring Router |
+| Reminders, Calendars (Full Access), Contacts | macos-mcp EventKit tools, location helper | ✅ granted to Ring Router |
+| Local Network | Hubitat Maker API on the LAN | ✅ granted to Ring Router |
+| HomeKit | HomeMCPBridge | 5 (pending Xcode) |
 | Full Disk Access | Reading Messages (general agent, tier 3b) | later, optional |
 
 ---
@@ -349,8 +380,8 @@ Every route starts in dry run until you've watched it behave.
 | **1. Skeleton** ✅ | Checks, store, parser, background jobs, notifier, simulator | Recordings echo back; tests pass |
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Live to the test recipient; weak-match Send/Cancel works through the tunnel. Remaining: lift `live_recipients` |
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Live-tested with all four models and research (notes wait on the Notes permission) |
-| **4. Apple apps** 🟡 | Notes ✅, reminders ✅, shopping list ✅, calendar ✅ live; EventKit location helper | Remaining: "when I get home" helper |
-| **5. Home** | Aliases, Hubitat + HomeMCPBridge, optional confirm-first actions | Case 8 through both backends |
+| **4. Apple apps** ✅ | Notes, reminders, shopping list, calendar live; location reminders from the My Card address | "When I get home" verified on the iPhone |
+| **5. Home** 🟡 | Hubitat ✅ (matching, rooms, fans, dimmers, locks, scenes); HomeKit via HomeMCPBridge | Hubitat live test, then HomeKit once Xcode is installed |
 | **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, `run_command`, tool/action guard | Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → research → Claude Code per host → Focus (experimental) | Each live in order |
 
@@ -363,8 +394,8 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 - [x] Tunnel: Tailscale Funnel at the Mac's ts.net address, proxying to localhost:8642; launchd keeps the listener up.
 - [x] macOS permissions (Messages, Notes, Reminders, Calendars full access, Contacts): granted to the service and verified.
 - [x] Calendars: default "Dave"; shared "Dave/Terri" (our, shared, Dave and Terri…); "Work".
-- [ ] Home coordinates and radius for "when I get home".
-- [ ] Device list and spoken names.
+- [x] Home location: read from the Contacts My Card each time; 100 m geofence.
+- [x] Devices: pulled from Hubitat automatically; nicknames in `[hubitat] aliases`, tie-breakers in `prefer`.
 - [x] OpenRouter model IDs: `gpt-6.1-terra`, `claude-sonnet-5.5`, `deepseek-v4.1-flash`, `qwen3.8-flash`; agent on `claude-sonnet-5.5`.
 - [ ] How long the Pebble app waits for a response.
 - [x] Pushcut: the notification's webhook URL accepts per-send title, text and action buttons (link and background-URL); confirmed on the phone.
@@ -375,7 +406,8 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 | A misheard name texts the wrong person | Allowlist, tiers, confirmation on weak matches, receipts |
 | A timed-out send gets retried and double-texts | `unknown` sends are never re-sent automatically |
 | The on-device rewrite changes meaning | Greedy mode, fallback rules, `sends` tests, receipts; "tell" never rewritten |
-| HomeMCPBridge is young | Hubitat path for Z-Wave devices |
+| HomeMCPBridge is young | Hubitat path for Z-Wave devices; HomeKit only for HomeKit-native devices |
+| macOS Local Network privacy blocks background tools | Ring Router.app wrapper; `check-permissions` verifies from the service's own context |
 | macos-mcp changes under opencode's npx cache | The router pins its own `mcp-macos@4.1.0` |
 
 ---

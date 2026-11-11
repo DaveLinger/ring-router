@@ -84,9 +84,27 @@ def make_guard(spec: AgentSpec) -> Callable:
             return f"DRY RUN: would {action} via {name} with {json.dumps(entry['args'])}. Treat it as done."
         entry["result"] = "ok"
         spec.calls.append(entry)
-        return await call_tool(name, args)
+        try:
+            out = await call_tool(name, args)
+        except Exception as e:
+            entry["result"], entry["output"] = "error", str(e)[:1500]
+            raise
+        entry["output"] = _short_output(out)
+        return out
 
     return guard
+
+
+def _short_output(out: Any, limit: int = 1500) -> str:
+    """Tool result for the activity trace (MCP results can be text, dicts or content blocks)."""
+    if isinstance(out, str):
+        s = out
+    else:
+        try:
+            s = json.dumps(out, default=str, ensure_ascii=False)
+        except Exception:
+            s = str(out)
+    return s if len(s) <= limit else s[:limit] + f"\u2026 ({len(s)} chars)"
 
 
 def build_toolset(spec: AgentSpec, mcp_source: Any):
@@ -171,7 +189,8 @@ def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None
         """Search the web for current information (places, prices, news, facts). Write a specific,
         self-contained query, e.g. 'cheapest Chinese restaurant Charleston WV'."""
         text, cites = search(query)
-        spec.calls.append({"tool": "web_search", "action": "read", "args": {"query": query}, "result": "ok"})
+        spec.calls.append({"tool": "web_search", "action": "read", "args": {"query": query}, "result": "ok",
+                           "output": _short_output(text), "sources": [c["url"] for c in cites]})
         for c in cites:
             if c["url"] not in {x["url"] for x in spec.citations}:
                 spec.citations.append(c)
@@ -193,6 +212,7 @@ def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None
             return ("Refused: the command must be copied word-for-word from the transcript. "
                     "Only remove the surrounding noise; don't add or change words.")
         route_name, summary = rerouter(command)
+        entry["output"] = f"{route_name}: {summary}"
         if route_name == "agent":
             entry["result"] = "blocked"; spec.calls.append(entry)
             return "That isn't one of the fixed commands, so handle the request yourself."
