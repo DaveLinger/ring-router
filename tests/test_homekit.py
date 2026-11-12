@@ -67,7 +67,7 @@ def test_hubitat_disabled_by_default_homekit_takes_bridged(cfg, monkeypatch):
     cfg.raw["hubitat"] = {"host": "x", "app_id": "1"}                  # no enabled flag
     cfg.secrets["hubitat_token"] = "t"
     cfg.raw["homekit"] = {"command": ["bridge"], "homes": ["Home"]}
-    monkeypatch.setattr(handlers, "_HUB", None)
+    monkeypatch.setattr(handlers.home, "_HUB", None)
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=None)
     home = handlers.get_hubitat(ctx)
     assert home.hubitat is None and home.homekit.skip_manufacturers == []

@@ -76,8 +76,9 @@ failure (input → wrong result), and a suggested fix. Areas most worth a look:
    control the wrong device.
 3. **Error handling:** timeouts, partial failures (multi-device home commands), a backend down,
    duplicate deliveries and retries.
-4. **Structure:** `handlers.py` has grown large. Suggest a split, but keep behavior identical and
-   the tests green.
+4. **Structure:** `handlers/` is a package (context, messages, apple, home, models; the route table
+   is in `__init__.py`). Tests and other modules reach everything through `ringrouter.handlers`,
+   and `Context` takes its defaults from there, so that is the place to swap one out.
 5. **Test gaps:** behavior that isn't covered.
 
 Keep changes small and reviewable, keep the core standard-library only, and update README/PLAN

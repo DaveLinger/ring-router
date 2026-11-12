@@ -274,7 +274,13 @@ ring-router/
 │   ├── router.py      # transcript → Route (pure function of text + config)
 │   ├── recipients.py  # allowlist matching: strong / weak / unknown
 │   ├── cancel.py      # trailing cancel-phrase detection
-│   ├── handlers.py    # one handler per route; dry run enforced here
+│   ├── handlers/      # one handler per route; dry run enforced here
+│   │   ├── __init__.py  #   route table, run(), run_confirmed()
+│   │   ├── context.py   #   Context, Result, activity-trace wrappers
+│   │   ├── messages.py  #   iMessage: compose, confirm, resolve the recipient, send
+│   │   ├── apple.py     #   notes, lists, reminders (timed + geofenced), calendar
+│   │   ├── home.py      #   device catalog, commands, confirmations, scenes
+│   │   └── models.py    #   ask-a-model, research, the general agent
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
 │   ├── agents.py      # the general agent (Pydantic AI, web search, tool/action guard)
