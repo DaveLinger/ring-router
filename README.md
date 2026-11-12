@@ -11,10 +11,12 @@ a light switch, or a question to the AI model of your choice.
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Core](https://img.shields.io/badge/core-stdlib%20only-success)
 ![Platform](https://img.shields.io/badge/platform-macOS%2027-000000?logo=apple&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-486-brightgreen)
 ![Status](https://img.shields.io/badge/status-live%20(test%20recipients)-yellow)
 
-[How it works](#how-it-works) · [What you can say](#what-you-can-say) · [Quick start](#quick-start) ·
-[Testing](#testing-without-a-ring) · [Status](#status) · [**Build plan →**](docs/PLAN.md)
+[How it works](#how-it-works) · [What you can say](#what-you-can-say) · [Safety](#safety) ·
+[Quick start](#quick-start) · [Operating it](#operating-it) · [Testing](#testing) ·
+[Status](#status) · [**Build plan →**](docs/PLAN.md)
 
 </div>
 
@@ -31,114 +33,158 @@ flowchart LR
     D --> F["📝 Notes · ⏰ Reminders · 📅 Calendar"]
     D --> G["💡 Home"]
     D --> H["🤖 ChatGPT · Claude · DeepSeek · Qwen"]
-    D --> I["🧠 Agents"]
+    D --> I["🧠 Agent"]
+    I -.->|"device state · control"| G
     E & F & G & H & I --> J["🔔 Pushcut<br/><small>receipts, answers, confirms</small>"]
     FM -.->|"“ask” → direct question"| E
-    FM -.->|"titles · item splits · dates"| F
+    FM -.->|"titles · item splits"| F
     FM["🍎 Apple Intelligence<br/><b>on-device model</b><br/><small>/usr/bin/fm · free · offline · ~0.35s</small>"]
     classDef apple fill:#f2f2f7,stroke:#8e8e93,stroke-width:2px,color:#1c1c1e
     class FM apple
 ```
 
 1. **The Pebble app** transcribes your recording and POSTs it, HMAC-signed, to one webhook.
-2. **ring-router** verifies the request (secret path, signature, timestamp, de-duplication).
-3. **The router** checks, in order: a cancel phrase → an exact scene → a fixed prefix → a refusal →
-   the general agent. Fixed prefixes never touch a cloud LLM.
-4. **The handler** acts, and **Pushcut** tells you what happened. It only asks first when a
-   recipient name is a near-miss, or for actions you've chosen to confirm.
+2. **ring-router** verifies it: secret path, signature, timestamp, de-duplication, and how long ago
+   you actually said it.
+3. **The router** checks, in order: a cancel phrase → an exact scene → a fixed command → a refusal →
+   the general agent. Fixed commands never touch a cloud model.
+4. **The handler** acts, and **Pushcut** tells you what happened.
 
-> **Push-to-talk means intent.** The ring only listens while you hold the button, so what you say
-> runs, including "unlock the front door" and "open the garage". Confirmations are opt-in per
-> action (`[home] confirm_actions`). The one built-in check is about *who*, not *what*: messages
-> only go to allowlisted recipients.
+Three ideas hold it together:
 
-Apple's **on-device model** (`/usr/bin/fm`) handles the small language jobs for free and offline:
-turning *"ask Terri when she'll be home"* into *"When will you be home?"*, titling notes, splitting
-shopping lists, and naming reminders and events. Dates and times are worked out in code from the
-words you said (the model is poor at calendars: it put "Tuesday" on a Saturday); its date is used
-only for phrases the code can't read, and then the notification says "check the date".
+| | |
+| --- | --- |
+| 🎙️ **Push-to-talk means intent** | The ring only listens while you hold the button, so what you say runs, including "unlock the front door". Confirmations are opt-in per action. The built-in check is about *who*, not *what*: messages only go to people on your allowlist. |
+| 🧮 **Code decides, models assist** | Routing, recipients, device matching and dates are deterministic code with an answer key ([`tests/phrases.toml`](tests/phrases.toml)). Apple's on-device model does the small language jobs: turning *"ask Terri when she'll be home"* into *"When will you be home?"*, titling notes, splitting shopping lists. |
+| 🧾 **Every command leaves a receipt** | A notification says exactly what was sent or changed, and the activity page shows each step: what was heard, how it routed, what each model said, what was sent to macOS or the house. |
 
 ---
 
 ## What you can say
 
+**Messages**
+
 | You say | What happens |
 | --- | --- |
 | *"Tell Terri I'm on my way."* | 💬 iMessages Terri: **"I'm on my way."** |
 | *"Ask Terri when she'll be home."* | 💬 Rewritten on-device: **"When will you be home?"** |
-| *"Hey Terri, dinner's ready"* | 💬 Sent as spoken: **"Dinner's ready"** |
+| *"Hey Terri, dinner's ready"* · *"Send Terri a text saying I'm late"* | 💬 Sent as spoken: **"Dinner's ready"** · **"I'm late"** |
 | *"Tell the guys let's hang out tomorrow."* | 💬 Posts to the group chat |
+| *"Tell Sherry I'm on my way"* | ❓ Close to "Terri": asks **Send / Cancel** first |
+| *"Tell Harry…"* · *"Tell Terri's mom…"* | 🚫 Not on the allowlist, nothing sent |
+| *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
+
+**Notes, lists, reminders, calendar**
+
+| You say | What happens |
+| --- | --- |
 | *"Make a note: the boat trailer needs new bearings"* | 📝 New note titled **"Boat Trailer Bearings Replacement"** |
 | *"Remember I parked on level 3, row G"* | 📝 Saved to the **Remember** folder |
 | *"Add milk, eggs and mac and cheese to my shopping list"* | 🛒 Three reminders: Milk · Eggs · Mac and cheese |
-| *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder due tomorrow 17:00; the receipt reads "Fri Nov 13, 5:00 PM" |
-| *"Remind me in 20 minutes to check the oven"* / *"…on Monday to put the bins out"* | ⏰ Exactly 20 minutes on; a day with no time is due that day |
-| *"Add ring-router test event tomorrow at 3pm to my calendar"* | 📅 One-hour event on your default calendar |
-| *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on the coming Tuesday at 15:00 ("next Tuesday" = Tuesday of next week) |
-| *"Add dinner with the guys tomorrow from 6 to 8pm to my calendar"* / *"Add Terri's birthday on December 3rd…"* | 📅 Spoken end times are kept; a date with no time is an all-day event |
-| *"Add date night Friday at 7 to our calendar"* | 📅 Goes on the shared calendar (spoken names map to calendars in config) |
-| *"Turn off the living room lights"* | 💡 Every light in that room, via Hubitat |
-| *"Set the master bedroom fan to low"* / *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
-| *"Turn on the living room fan"* | 🌀 "Fan" means the ceiling fan when several match; otherwise it asks "Which one?" |
-| *"Lock the garage patio door"* | 🔒 Locks run as spoken (confirm-first is opt-in) |
-| *"Unlock the front door"* / *"Open the front garage door"* | 🏠 HomeKit-native devices via HomeMCPBridge |
+| *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder; the receipt reads **"Call the vet: Fri Nov 13, 5:00 PM"** |
+| *"Remind me in 20 minutes to check the oven"* · *"…on Monday to put the bins out"* | ⏰ Exactly 20 minutes on · due that day, no alert time |
 | *"Remind me when I get home to take out the trash"* | 📍 Geofenced reminder at the address on your Contacts card |
-| *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Web-backed answer as a notification, full text + sources a tap away |
-| *"Ask DeepSeek more about that"* | 🤖 Continues the same conversation (within 10 minutes) |
+| *"Add dentist Tuesday at 3 to my calendar"* | 📅 The coming Tuesday at 3:00 PM ("next Tuesday" is Tuesday of next week) |
+| *"Add dinner with the guys tomorrow from 6 to 8pm to our calendar"* | 📅 On the shared calendar, ending at 8 |
+| *"Add Terri's birthday on December 3rd to my calendar"* | 📅 An all-day event |
+
+**The house**
+
+| You say | What happens |
+| --- | --- |
+| *"Turn off the living room lights"* · *"Kitchen lights off"* · *"Turn the lights off in the kitchen"* | 💡 Every light in that room |
+| *"Set the master bedroom fan to low"* · *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
+| *"Turn on the living room fan"* | 🌀 "Fan" means the ceiling fan when several match; otherwise it asks "Which one?" |
+| *"Lock the garage patio door"* · *"Unlock the front door"* · *"Open the front garage door"* | 🔒 Run as spoken (confirm-first is opt-in) |
+| *"Turn off everything"* | 💡 Everything switchable except outlets and plugs |
+| *"Goodnight"* (the whole phrase) | 🌙 A scene: a fixed list of device actions |
+| *"Is the garage door closed?"* · *"Which kitchen lights are on?"* | 🧠 The agent reads the device state |
+
+**Questions and everything else**
+
+| You say | What happens |
+| --- | --- |
+| *"Ask DeepSeek what's the best Chinese restaurant near me"* | 🤖 Web-backed answer as a notification, full text and sources a tap away |
+| *"Ask DeepSeek more about that"* | 🤖 Continues the conversation (within 10 minutes) |
 | *"Research the best robot vacuum under $500"* | 🔎 A research note in Apple Notes |
-| *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
-| *"What's on my calendar Thursday?"* | 🧠 General agent reads your calendar |
-| *"Is the garage door closed?"* / *"Which kitchen lights are on?"* | 🧠 General agent reads the device state |
-| *"Kitchen lights off"* / *"Shut off the porch light"* | 🧠 Phrasing the fixed commands miss: the agent runs it through the same device matcher |
-| *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 General agent searches the web; follow-ups keep the thread |
-| *"Can you add dinner at the cheapest one Friday at 7 to my calendar?"* | 🧠 Same agent, same thread: question-shaped requests just work |
-| *"Make a new contact named John Smith, 555-1212"* | 👤 General agent creates the contact |
-| *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 Agent spots the buried command and hands it to DeepSeek |
-| *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
-| *"Tell Harry I'm on my way"* | 🚫 Not on the allowlist, nothing sent |
-| *"Set a timer for 10 minutes"* | 🚫 Refused (timers aren't supported) |
+| *"What's on my calendar Thursday?"* | 🧠 The general agent reads your calendar |
+| *"Move my dentist appointment to next week"* | 🧠 The agent finds it and moves it |
+| *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 Web search; follow-ups keep the thread |
+| *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 The agent spots the buried command and hands it back, word for word |
+| *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code on that host *(not built yet)* |
+| *"Set a timer for 10 minutes"* | 🚫 Refused: timers and alarms aren't supported |
+
+---
+
+## Safety
+
+<details open>
+<summary><b>Who gets a message</b></summary>
+
+- **Allowlist only.** Messages go to the people and chats in your config, nobody else.
+- **Near misses ask.** A name spelled *and* sounding like one of yours ("Sherry", "Jerry" for Terri)
+  gets a **Send / Cancel** tap. "Troy", "Terri's mom" and "the guy at the door" are refused.
+- **No guessing at numbers.** The number is the `handle` in your config, or the one Contacts card
+  with that exact name. No card, or two, and nothing is sent.
+- **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt shows the exact text sent.
+- **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
+  ("Tell Terri never mind", with nothing in between, sends "Never mind".)
+
+</details>
 
 <details>
-<summary><b>Safety rules</b></summary>
+<summary><b>What runs, and when</b></summary>
 
-- **Allowlist only.** Messages go only to people and chats in your config. Close-but-not-exact names
-  ("Sherry" for Terri) need a **Send / Cancel** tap; unknown names are refused.
-- **No guessing at numbers.** A recipient's number is the `handle` in your config, or the one Contacts
-  card with that exact name. No card, or two of them, and nothing is sent.
-- **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt always shows the exact text sent.
-- **Optional confirm-first actions.** List any home actions (e.g. `unlock`, `open`) in
-  `[home] confirm_actions` to require a Pushcut tap. Empty by default: the ring only listens while
-  you hold the button, so what you say runs.
-- **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
-- **No double texts.** A send that times out is marked unknown and never retried automatically. The
-  fixed routes give each mcp-macos or HomeKit call 60 seconds, so a stuck permission prompt can't hang
-  a command.
-- **Nothing runs twice.** Every command ends as done, **failed** (nothing happened), **partial** (some
-  of it happened: the notification says which part) or **unknown** (no answer in time). Tapping Retry
-  in the Pebble app reruns only a *failed* one. A command cut off by a restart is reported, not rerun.
-- **Buttons act only when tapped.** `/confirm` links accept POST only, so a link preview can't send or
-  unlock anything; the answer and activity pages can't load or run anything but their own text.
-- **The agent's device control is fenced in.** It uses the same matcher, dry run and confirmations as
-  a spoken command, only acts when your own words were about controlling something, is capped at
-  five actions a request, and an unlock or garage-open through the agent always asks for a tap.
-- **Optional read-back.** With `[home] read_back = true`, a lock, unlock, open or close waits for
-  the device and reports what it actually did ("Front Door locked (confirmed)" or "was told to lock
-  but reports unlocked"). Off by default, because the command then waits on the device.
-- **"Everything" spares the outlets.** "Turn off everything" leaves plugs alone (name one to switch
-  it). Detectors, alarms and sirens are never controlled, and `[home] exclude` lists anything else to
-  keep hands off, whichever backend it is on.
-- **Old recordings ask first.** A message or home command that arrives more than 5 minutes after you
-  said it (`[server] max_recording_age_s`) gets a **Run / Cancel** tap instead of running. "Remind me
-  in 20 minutes" counts from when you spoke.
-- **Noise-tolerant, not inventive.** When background talk hides a command, the agent can hand it back to
-  the router, but only as a word-for-word excerpt of what you said. "Don't unlock the door" is not
-  handed back, and a rerouted message, unlock or garage-open asks first.
-- **The agent can't text or email.** It gets calendar, reminders, notes, contacts and web search; allowed
-  tools *and actions* are enforced in code, not just the prompt.
-- **The agent only changes things you asked to change.** It may update or delete only when your own
-  words call for it ("move", "cancel", "mark it done"…), so nothing it reads in an invite or on a web
-  page can make it. One delete per request (`[agents] max_deletes`).
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.
+- **Optional confirm-first actions.** List home actions (e.g. `unlock`, `open`) in
+  `[home] confirm_actions` to require a tap. Empty by default.
+- **Old recordings ask first.** A message or home command that arrives more than 5 minutes after you
+  said it gets a **Run / Cancel** tap instead of running.
+- **Nothing runs twice.** A command ends as done, **failed** (nothing happened), **partial** (the
+  notification says which part) or **unknown** (no answer in time). Retry in the Pebble app reruns
+  only a *failed* one. A command cut off by a restart is reported, not rerun.
+- **Nothing hangs.** Each call into macOS or HomeKit gets 60 seconds, so a stuck permission prompt
+  can't stall a command.
+- **Buttons act only when tapped.** `/confirm` accepts POST only, so a link preview can't send or
+  unlock anything.
+
+</details>
+
+<details>
+<summary><b>What the agent can do</b></summary>
+
+- **It can't text or email.** It gets calendar, reminders, notes, contacts, web search and home
+  devices. Allowed tools *and actions* are enforced in code, not just in the prompt.
+- **It only changes what you asked to change.** Update, delete and device control need your own
+  words to call for them, so nothing it reads in an invite or on a web page can trigger them. One
+  delete and five device actions per request.
+- **Unlock and open through the agent always ask**, as does anything it digs out of background
+  talk. "Don't unlock the door" is never handed back as a command.
+- **It stops.** A run ends after 12 model calls, and its cost shows on the activity page.
+
+</details>
+
+<details>
+<summary><b>The house</b></summary>
+
+- **Ambiguous means ask.** "Turn off the living room fan" with two fans changes nothing and asks
+  which. "Open the door" does not open the garage.
+- **Hands off.** Detectors, alarms and sirens are never controlled; `[home] exclude` lists anything
+  else, on either backend. "Everything" spares outlets and plugs.
+- **Optional read-back.** With `[home] read_back = true`, lock, unlock, open and close wait for the
+  device and report what it did: "Front Door locked (confirmed)", or "was told to lock but reports
+  unlocked". Off by default, because the command then waits on the device.
+
+</details>
+
+<details>
+<summary><b>Dates and times</b></summary>
+
+The on-device model is poor at calendars: tested on 22 spoken dates it got 12 right ("Tuesday" came
+back as a Saturday), and a longer prompt didn't help. So the time is worked out in code from your
+words, and the model supplies only the title. For phrases the code can't read (a holiday, "the end
+of the month") the model's date is used and the receipt says **"check the date"**. Receipts always
+show the weekday.
 
 </details>
 
@@ -146,99 +192,131 @@ only for phrases the code can't read, and then the notification says "check the 
 
 ## Quick start
 
-> **Requires** macOS 27 (for `/usr/bin/fm`), Python 3.11+, and
-> [mcp-macos](https://github.com/krmj22/macos-mcp) (run via `npx`) for the Apple apps.
+> **Requires** macOS 27 (for `/usr/bin/fm`), Python 3.11+, Node (for the vendored
+> [mcp-macos](https://github.com/krmj22/macos-mcp)), and [Pushcut](https://www.pushcut.io) on your phone.
 
 ```sh
 git clone https://github.com/DaveLinger/ring-router.git && cd ring-router
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+vendor/setup.sh                      # pinned mcp-macos: install, patch, build its EventKit helper
 
-cp config.example.toml config.toml   # recipients, models, hosts, lists... (git-ignored)
-.venv/bin/ring-router init           # generates the path token + signing secret into .env
+cp config.example.toml config.toml   # recipients, models, lists, calendars, scenes (git-ignored)
+.venv/bin/ring-router init           # path token, signing secret and activity token into .env
+.venv/bin/ring-router route "Tell Terri I'm on my way"    # try it: dry run, nothing is sent
 ```
+
+Everything starts in **dry run**. Set `[server] dry_run = false` when the receipts look right.
 
 ### Run it as a service
 
 ```sh
-app/build.sh                         # builds build/Ring Router.app (see below)
-helpers/georeminder/build.sh         # builds build/georeminder (location reminders)
-cp launchd/local.ring-router.plist launchd/local.ring-router.watchdog.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.plist           # listener: now and at login
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.watchdog.plist  # down alert every 5 min
-launchctl kickstart -k gui/$(id -u)/local.ring-router                                     # restart after changes
-tailscale funnel --bg 8642                                                                 # public HTTPS address
+app/build.sh                         # build/Ring Router.app: one macOS identity for every permission
+helpers/georeminder/build.sh         # build/georeminder: location reminders
+cp launchd/local.ring-router{,.watchdog,.selftest}.plist ~/Library/LaunchAgents/
+for job in local.ring-router local.ring-router.watchdog local.ring-router.selftest; do
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/$job.plist
+done
+tailscale funnel --bg 8642           # public HTTPS address for the Pebble app and Pushcut buttons
 ```
 
-Set `[server] public_url` to the Funnel address so notification buttons, answer pages and the
-activity page work from your phone. Logs: `~/Library/Logs/ring-router.log` (and `-watchdog.log`);
-each is cut back to its last 1 MB once it passes 5 MB. Activity, saved answers and conversations
-older than `[server] retention_days` (90) are deleted.
+Set `[server] public_url` to the Funnel address. Restart after code or config changes with
+`launchctl kickstart -k gui/$(id -u)/local.ring-router`.
 
 <details>
 <summary><b>Why "Ring Router.app", and granting macOS permissions</b></summary>
 
-macOS grants privacy permissions (Local Network, Calendars, Reminders, Contacts, Automation) to the
-*responsible app*. A Homebrew Python started by launchd has no app identity, so macOS Local Network
-privacy silently blocks it ("No route to host" to the Hubitat hub). `app/` builds a tiny signed
-launcher bundle, **Ring Router.app** (`local.ring-router`), that starts the listener as a child and
-stays its parent. Every permission then lives under one "Ring Router" entry in System Settings, and
+macOS grants privacy permissions (Local Network, Calendars, Reminders, Contacts, Automation, HomeKit)
+to the *responsible app*. A Homebrew Python started by launchd has no app identity, so macOS Local
+Network privacy silently blocks it ("No route to host" to the Hubitat hub). `app/` builds a small
+signed launcher, **Ring Router.app** (`local.ring-router`), that starts the listener as a child and
+stays its parent. Every permission then lives under one "Ring Router" entry in System Settings and
 survives Homebrew Python upgrades.
 
-To trigger and verify all prompts from that same context:
+To trigger and verify the prompts from that same context:
 `launchctl bootstrap gui/$(id -u) launchd/local.ring-router.permcheck.plist` runs
 `ring-router check-permissions` (log: `~/Library/Logs/ring-router-permcheck.log`). Calendars needs
 **Full Access**, not "Add Events Only".
 
-mcp-macos is vendored in `vendor/`: npm now blocks the install script that compiles its EventKit
-helper, and ring-router patches that helper (`vendor/patches/`) so `[calendars] sources = ["iCloud"]`
-hides other accounts, such as a Google account that calsync mirrors into iCloud, which would otherwise
-make every event appear twice. Set up with `vendor/setup.sh` (install, patch, build).
+mcp-macos is vendored in `vendor/` because npm blocks the install script that compiles its EventKit
+helper, and because ring-router patches that helper (`vendor/patches/`): `[calendars] sources =
+["iCloud"]` hides other accounts, such as a Google account that calsync mirrors into iCloud, which
+would otherwise make every event appear twice.
 </details>
 
-### Activity page and down alert
+<details>
+<summary><b>Publishing only what must be public</b></summary>
 
-- **`/activity/<activity_token>`** (token in `.env`): recent commands with outcome and model cost.
-  Tap one for its **step-by-step trace**: request metadata, exact transcript, cleaned text, route
-  decision, on-device model input → output, composed message, model request and reply, every agent
-  tool call with its result, device matches, each command sent to macOS/Hubitat with its result,
-  notifications, and the HTTP response the Pebble app saw. Kept 90 days (`retention_days`).
-- **Watchdog** (`ring-router watchdog`, every 5 minutes via launchd): checks the listener locally
-  and through the tunnel; Pushcut alert after two failed checks ("listener down" vs "tunnel down")
-  and once on recovery. It runs on the same Mac, so it can't report the Mac itself being off.
+`tailscale funnel --bg 8642` puts the whole listener on the internet, including the activity page
+(guarded only by the token in its URL). Only four paths need to be public: `/hook` (the Pebble
+app), `/confirm` (Pushcut buttons), `/answers` ("Full answer" links) and `/health` (the watchdog).
+Funnel is switched on per port, so the split is: those four paths on 443, and the activity page on
+a second port served to your tailnet only.
+
+```sh
+for p in hook confirm answers health; do
+  tailscale funnel --bg --set-path /$p http://127.0.0.1:8642/$p
+done
+tailscale funnel --https=443 --set-path / off                # stop publishing everything else
+tailscale serve --bg --https=10000 --set-path /activity http://127.0.0.1:8642/activity   # tailnet only
+tailscale funnel status
+```
+
+The activity page is then `https://<your-mac>.ts.net:10000/activity/<token>`, reachable only from
+devices signed in to your tailnet. To go back: `tailscale funnel --bg 8642`. Check
+`tailscale funnel status` after each step, and don't use `tailscale funnel reset` if other ports on
+this machine are funnelled: it clears them all.
+</details>
 
 ### Configuration
 
 | File | What's in it | In git? |
 | --- | --- | --- |
-| `config.toml` | Recipients, models, hosts, lists, calendars, scenes, cancel phrases, dry-run flags | ❌ (copy from `config.example.toml`) |
-| `.env` | `RING_ROUTER_PATH_TOKEN`, `RING_ROUTER_SIGNING_SECRET`, API keys (mode 600) | ❌ (see `.env.example`) |
+| `config.toml` | Recipients, models, lists, calendars, home, scenes, cancel phrases, dry-run flags | ❌ copy from `config.example.toml` |
+| `.env` | Path token, signing secret, activity token, API keys (mode 600) | ❌ see `.env.example` |
 | `prompts.toml` | **Every instruction given to a model**, marked LIVE or DRAFT | ✅ |
-| `profile.md` | Facts about you added to every model prompt (location for "near me", etc.) | ❌ (see `profile.example.md`) |
-| `tests/phrases.toml` | The answer key: phrases and how they must route and what they send | ✅ |
+| `profile.md` | Facts about you added to every cloud-model prompt (location for "near me") | ❌ see `profile.example.md` |
+| `tests/phrases.toml` | The answer key: phrases, how they must route, what they send | ✅ |
 
-Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_webhook_url`,
-`hubitat_token`), or edit `.env` directly. For Pushcut, the notification's Webhook URL is enough; no API key needed.
+Add keys with `ring-router set-secret openrouter_api_key` (or `pushcut_webhook_url`,
+`hubitat_token`), or edit `.env`. For Pushcut, the notification's Webhook URL is enough.
 
-### Commands
+---
+
+## Operating it
 
 | Command | Does |
 | --- | --- |
 | `ring-router serve` | Run the listener |
-| `ring-router route "phrase"` | Route a phrase and show what would happen (dry run). Routes that call a cloud model only run with `--online` |
+| `ring-router route "phrase"` | Route a phrase and show what would happen (dry run). Cloud-model routes only run with `--online` |
 | `ring-router sim "phrase" …` | Send phrases to the running listener exactly as the ring would |
-| `ring-router sim --file tests/phrases.toml` | Send the whole phrase list |
-| `ring-router recent` | Show recent deliveries |
-| `ring-router check-permissions` | Touch each macOS app and Hubitat once (run via the permcheck launchd job) |
-| `ring-router watchdog` | One health check; Pushcut alert on change |
-| `ring-router selftest` | Read-only check of every backend (Calendar, Reminders, Notes, Contacts, on-device model, home devices); Pushcut alert when one fails. Run daily by `launchd/local.ring-router.selftest.plist` |
-| `ring-router init` | Generate the path token, signing secret and activity token in `.env` |
+| `ring-router recent` | Recent deliveries |
+| `ring-router selftest` | Read-only check of every backend; Pushcut alert when one fails |
+| `ring-router watchdog` | One health check of the listener and the tunnel; Pushcut alert on change |
+| `ring-router check-permissions` | Touch each macOS app once (run via the permcheck launchd job) |
+| `ring-router init` · `set-secret <name>` | Generate or set secrets in `.env` |
+
+**Keeping an eye on it**
+
+- **Activity page** at `/activity/<activity_token>`: recent commands with outcome and model cost.
+  Tap one for its step-by-step trace: the exact transcript, the route decision, what the on-device
+  model was given and returned, the date the code settled on, every agent tool call, device matches,
+  each command sent to macOS or the house with its result, and the reply the Pebble app saw.
+- **Watchdog**, every 5 minutes: is the listener up, is the tunnel up. Alerts after two failed
+  checks and once on recovery. It runs on the same Mac, so it can't report the Mac being off.
+- **Self-test**, daily at 04:10: reads from Calendar, Reminders, Notes, Contacts, the on-device
+  model and the home backends, with the service's own permissions. It catches what otherwise fails
+  silently, such as a macOS update resetting a privacy grant. Nothing is created and no cloud model
+  is called.
+- **Housekeeping:** logs in `~/Library/Logs/ring-router*.log` are cut back to their last 1 MB once
+  they pass 5 MB. Activity, saved answers and conversations are deleted after 90 days
+  (`[server] retention_days`).
 
 ---
 
-## Testing without a ring
+## Testing
 
-`ring-router sim` builds the same signed multipart request the Pebble app sends (headers,
-HMAC-SHA256 signature, optional fake audio), so the whole pipeline runs end to end:
+`ring-router sim` builds the same signed multipart request the Pebble app sends, so the whole
+pipeline runs end to end without a ring:
 
 ```console
 $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
@@ -248,25 +326,22 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
   ← 200 needs_confirm: [imessage] weak match 'sherry' -> Terri; confirmation Cf6-iuBYDYrgXUpe
 ```
 
-Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`,
-`--recorded-ago 3600` (an old recording).
+Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--trigger double-click-hold`,
+`--recorded-ago 3600` (an old recording), `--file tests/phrases.toml` (the whole answer key).
 
 ```sh
-.venv/bin/pytest -q               # everything (446 tests)
+.venv/bin/pytest -q               # everything (486 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
-.venv/bin/pytest -m live          # only those: the exact text each message sends, and reminder and
-                                  # calendar times with the real model in the loop
+.venv/bin/pytest -m live          # only those: exact message text, and reminder and calendar
+                                  # times with the real model in the loop
 ```
 
-[`tests/test_extract_live.py`](tests/test_extract_live.py) also keeps five expected failures
-(`xfail`): what the on-device model answers on its own for dates the pipeline gets right. To record
-an open issue without fixing it, add a strict `xfail` test to
-[`tests/test_review_fixes.py`](tests/test_review_fixes.py); fixing it later makes that test fail
-until the marker is removed.
-
-[`tests/phrases.toml`](tests/phrases.toml) is the answer key. Each case lists the phrase, the
-route, the text extracted after the prefix, and for messages the exact text that goes out. Add
-phrases as you think of them; the tests fail until the router agrees.
+| Where | What it pins down |
+| --- | --- |
+| [`tests/phrases.toml`](tests/phrases.toml) | The answer key: each phrase, its route, the text pulled out, and for messages the exact text sent. Add phrases as you think of them; the tests fail until the router agrees. |
+| [`tests/test_when.py`](tests/test_when.py) | Dates and times from spoken words, no model involved |
+| [`tests/test_review_fixes.py`](tests/test_review_fixes.py) · [`test_failures.py`](tests/test_failures.py) | What happens when something breaks. To record an open issue, add a strict `xfail` test here; fixing it later fails the run until the marker is removed. |
+| [`tests/test_extract_live.py`](tests/test_extract_live.py) | The real model in the loop, plus five expected failures showing what it answers on its own |
 
 ---
 
@@ -274,27 +349,22 @@ phrases as you think of them; the tests fail until the router agrees.
 
 | Piece | State |
 | --- | --- |
-| Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
-| Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
-| On-device rewrites, note titles, item splitting, reminder and event titles | ✅ Done (real model) |
-| Dates and times computed in code (`when.py`), the model as fallback | ✅ Done; 21 live cases right, where the model alone got about half |
-| Ring simulator, phrase answer key, 446 tests | ✅ Done |
-| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live: text, note, shopping item, reminder and event created end to end through the tunnel |
-| Pushcut notifications and buttons | ✅ Delivered; Send/Cancel and Full answer verified through the tunnel |
-| Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
-| Research notes (web search → Apple Note) | ✅ Research live-tested; saving the note waits on the Notes permission |
-| General agent (Pydantic AI): macOS tools, web search, follow-ups, `run_command` | ✅ Live: read the real calendar, then moved an event as a follow-up |
-| Home control via Hubitat Maker API (optional module: lights, dimmers, fan speeds, locks) | ✅ Live; `[hubitat] enabled` (off by default, HomeKit then handles everything) |
-| HomeKit-only devices (front door lock, garage doors, fireplaces, outlets…) | ✅ Live via a patched HomeMCPBridge, limited to one HomeKit home |
+| Webhook checks: secret path, HMAC v1, ±5 min, dedupe, old-recording gate | ✅ Done (the real ring's format still needs checking against real traffic) |
+| Router: cancels, scenes, fixed commands, recipient tiers, refusals | ✅ Done; 117 phrases in the answer key |
+| On-device model: "ask" rewrites, note titles, item splits, reminder and event titles | ✅ Done (real model) |
+| Dates and times in code (`when.py`), the model as flagged fallback | ✅ Done; 21 of 21 live cases right |
+| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live end to end through the tunnel; real sends still limited to the owner (`live_recipients`) |
+| Pushcut notifications and buttons | ✅ Send/Cancel and Full answer verified through the tunnel |
+| Ask a model, research notes: OpenRouter, web search, follow-ups, answer page | ✅ Live-tested with all four models; saving a research note waits on the Notes permission |
+| General agent: macOS tools, web search, follow-ups, `run_command`, write-intent gate | ✅ Live: read the real calendar, then moved an event as a follow-up |
+| Home: HomeKit via a patched HomeMCPBridge, Hubitat as an optional module | ✅ Live (lights, dimmers, fans, locks, garage doors) |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
-| Activity page with per-command trace; watchdog down alert | ✅ Live |
-| Agent home tools (device state, control by natural phrasing); lock/door read-back | 🟡 Built and tested with fakes; not yet tried against the real devices |
-| Daily self-test (`ring-router selftest`) | 🟡 Built; launchd job file ready, not installed |
-| Ring Router.app (one macOS identity for all permissions) | ✅ Running the listener; all permissions verified |
+| Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
+| Agent home tools; lock and door read-back; daily self-test | 🟡 Built and tested with fakes; not yet tried against the real devices |
 | Claude Code per host | ⬜ Stub; needs SSH to the VPS |
-| Tailscale Funnel tunnel, launchd service | ✅ Running; buttons and answer pages work from the phone |
 
-See the **[build plan](docs/PLAN.md)** for the full design, decisions, and phase-by-phase roadmap.
+See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the
+roadmap. Notes for AI assistants working in this repo are in [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -308,34 +378,35 @@ ring-router/
 │   ├── router.py      # transcript → Route (pure function of text + config)
 │   ├── recipients.py  # allowlist matching: strong / weak / unknown
 │   ├── cancel.py      # trailing cancel-phrase detection
+│   ├── when.py        # dates and times worked out from the spoken words (pure functions)
 │   ├── handlers/      # one handler per route; dry run enforced here
 │   │   ├── __init__.py  #   route table, run(), run_confirmed()
 │   │   ├── context.py   #   Context, Result, activity-trace wrappers
 │   │   ├── messages.py  #   iMessage: compose, confirm, resolve the recipient, send
 │   │   ├── apple.py     #   notes, lists, reminders (timed + geofenced), calendar
-│   │   ├── home.py      #   device catalog, commands, confirmations, scenes
+│   │   ├── home.py      #   device catalog, commands, read-back, confirmations, scenes
 │   │   └── models.py    #   ask-a-model, research, the general agent
+│   ├── agents.py      # the general agent (Pydantic AI): tools, guards, limits
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
-│   ├── when.py        # dates and times worked out from the spoken words (pure functions)
-│   ├── logfile.py     # keeps the launchd log files bounded
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
-│   ├── agents.py      # the general agent (Pydantic AI, web search, tool/action guard)
-│   ├── hubitat.py     # Hubitat Maker API: devices, spoken-name matching, commands
+│   ├── hubitat.py     # device catalog and spoken-name matching; Hubitat Maker API
+│   ├── homekit.py     # HomeKit via HomeMCPBridge; the combined catalog
+│   ├── mcp.py         # minimal stdio MCP client (with a hard timeout)
 │   ├── activity.py    # activity page + per-command trace view
 │   ├── watchdog.py    # down alert
 │   ├── selftest.py    # daily read-only check of every backend
+│   ├── logfile.py     # keeps the launchd log files bounded
 │   ├── md.py          # Markdown → HTML for the answer page and research notes
-│   ├── mcp.py         # minimal stdio MCP client for mcp-macos
 │   ├── notify.py      # console + Pushcut notifiers
 │   ├── store.py       # SQLite: deliveries, trace, pending confirmations
 │   ├── prompts.py     # loads prompts.toml
 │   ├── config.py      # config.toml + .env
-│   └── cli.py         # ring-router command
+│   └── cli.py         # the ring-router command
 ├── app/               # Ring Router.app launcher (Swift) + Info.plist + build.sh
 ├── helpers/georeminder/  # Swift: geocode + EventKit location reminder
-├── launchd/           # service, watchdog and permission-check jobs
-├── vendor/            # pinned mcp-macos + HomeMCPBridge build script and patches (sources git-ignored)
-├── tests/             # phrases.toml answer key + protocol, server, agent, hubitat, live-model tests
+├── launchd/           # listener, watchdog, self-test and permission-check jobs
+├── vendor/            # pinned mcp-macos + HomeMCPBridge build script and patches
+├── tests/             # the answer key and the test suite
 ├── docs/PLAN.md       # build plan and decisions
 ├── prompts.toml       # all model instructions
 ├── config.example.toml
