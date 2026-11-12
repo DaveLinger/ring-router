@@ -259,8 +259,12 @@ All model instructions live in [`prompts.toml`](../prompts.toml).
 ## Home automation
 
 Two backends behind one set of spoken names, combined into one catalog:
-- **Hubitat** for every device it has (direct local HTTP, via `/usr/bin/curl`, which macOS Local
-  Network privacy lets through reliably under Ring Router.app).
+- **Hubitat is an optional module** (`[hubitat] enabled`, off by default). When on, it handles every
+  device it has (direct local HTTP via `/usr/bin/curl`, which macOS Local Network privacy lets through
+  reliably under Ring Router.app). When off, HomeKit handles everything, including Hubitat's bridged devices.
+  On this install it stays on for now: HomeMCPBridge can't drive the ceiling fans (they use HomeKit's
+  newer fan service, which it doesn't recognize, and it has no speed control), and 5 Hubitat devices
+  aren't bridged into HomeKit (Furnace Fan Boost, Guest Bedroom Fan/Light, Master Bathroom Accessories, Patio 2).
 - **HomeKit** (the superset) only for HomeKit-native devices. HomeKit entries whose manufacturer is
   "Hubitat" are bridged duplicates and are skipped.
 - HomeMCPBridge is patched (`vendor/patches/HomeMCPBridge-ring-router.patch`): `HOMEMCP_HOMES`

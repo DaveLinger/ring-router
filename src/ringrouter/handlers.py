@@ -486,17 +486,22 @@ def get_hubitat(ctx: Context):
     global _HUB
     hc, kc = ctx.cfg.section("hubitat"), ctx.cfg.section("homekit")
     token = ctx.cfg.secret("hubitat_token")
-    hub_ok = bool(hc.get("host") and hc.get("app_id") and token)
-    hk_ok = bool(kc.get("command"))
+    # Hubitat is an optional module: off unless [hubitat] enabled = true. HomeKit (the superset)
+    # then handles everything, including devices bridged in from Hubitat.
+    hub_ok = bool(hc.get("enabled", False) and hc.get("host") and hc.get("app_id") and token)
+    hk_ok = bool(kc.get("command")) and kc.get("enabled", True)
     if not (hub_ok or hk_ok):
         return None
-    key = (hc.get("host"), str(hc.get("app_id")), token, tuple(kc.get("command", [])), tuple(kc.get("homes", [])))
+    key = (hub_ok, hc.get("host"), str(hc.get("app_id")), token, hk_ok, tuple(kc.get("command", [])),
+           tuple(kc.get("homes", [])))
     if _HUB is None or _HUB[0] != key:
         from .homekit import Home, HomeKit  # noqa: PLC0415
         from .hubitat import Hubitat  # noqa: PLC0415
         hub = Hubitat(hc["host"], str(hc["app_id"]), token, exclude=hc.get("exclude", [])) if hub_ok else None
+        # With Hubitat on, its devices' HomeKit copies are skipped (Hubitat controls them directly).
+        skip = kc.get("skip_manufacturers", ["Hubitat"]) if hub_ok else []
         hk = HomeKit(kc["command"], homes=kc.get("homes"), exclude_rooms=kc.get("exclude_rooms", []),
-                     skip_manufacturers=kc.get("skip_manufacturers", ["Hubitat"])) if hk_ok else None
+                     skip_manufacturers=skip) if hk_ok else None
         _HUB = (key, Home(hub, hk, aliases=hc.get("aliases", {}), prefer=hc.get("prefer", [])))
     return _HUB[1]
 

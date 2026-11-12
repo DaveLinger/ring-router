@@ -60,6 +60,20 @@ def home():
     return h
 
 
+def test_hubitat_disabled_by_default_homekit_takes_bridged(cfg, monkeypatch):
+    from ringrouter import handlers
+    cfg.raw["hubitat"] = {"host": "x", "app_id": "1"}                  # no enabled flag
+    cfg.secrets["hubitat_token"] = "t"
+    cfg.raw["homekit"] = {"command": ["bridge"], "homes": ["Home"]}
+    monkeypatch.setattr(handlers, "_HUB", None)
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=None)
+    home = handlers.get_hubitat(ctx)
+    assert home.hubitat is None and home.homekit.skip_manufacturers == []
+    cfg.raw["hubitat"]["enabled"] = True
+    home = handlers.get_hubitat(ctx)
+    assert home.hubitat is not None and home.homekit.skip_manufacturers == ["hubitat"]
+
+
 def test_homekit_filters(home):
     names = sorted(d.label for d in home.homekit.devices())
     assert names == ["Front Door Lock", "Front Garage Door", "Laundry Room Door", "Living Room Fireplace"]

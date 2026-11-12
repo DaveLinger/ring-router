@@ -39,7 +39,7 @@ class HomeKit:
         self.bridge_cmd = command
         self.env = dict(os.environ, HOMEMCP_HOMES=",".join(homes or ["primary"]))
         self.exclude_rooms = {_norm(r) for r in (exclude_rooms or [])}
-        self.skip_manufacturers = [_norm(m) for m in (skip_manufacturers or ["hubitat"])]
+        self.skip_manufacturers = [_norm(m) for m in (["hubitat"] if skip_manufacturers is None else skip_manufacturers)]
         self._call = call or (lambda tool, args: mcp.call_tool(self.bridge_cmd, tool, args, timeout_s=60, env=self.env))
         self.cache_s, self._cache, self._cache_t = cache_s, None, 0.0
 
