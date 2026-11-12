@@ -20,6 +20,8 @@ HK_DEVICES = [
      "manufacturer": "Meross", "reachable": True},
     {"id": "FP-1", "name": "Living Room Fireplace", "room": "Living Room", "type": "switch", "source": "HomeKit",
      "manufacturer": "Shelly", "reachable": True},
+    {"id": "FAN-1", "name": "Office Fan", "room": "Office", "type": "fan", "source": "HomeKit",
+     "manufacturer": "GE", "reachable": True},
     {"id": "HB-1", "name": "Master Bedroom Light", "room": "Master Bedroom", "type": "light", "source": "HomeKit",
      "manufacturer": "Hubitat C-7", "reachable": True},                      # bridged duplicate
     {"id": "MOM-1", "name": "MOM Backyard", "room": "Mom’s House", "type": "switch", "source": "HomeKit",
@@ -76,7 +78,7 @@ def test_hubitat_disabled_by_default_homekit_takes_bridged(cfg, monkeypatch):
 
 def test_homekit_filters(home):
     names = sorted(d.label for d in home.homekit.devices())
-    assert names == ["Front Door Lock", "Front Garage Door", "Laundry Room Door", "Living Room Fireplace"]
+    assert names == ["Front Door Lock", "Front Garage Door", "Laundry Room Door", "Living Room Fireplace", "Office Fan"]
 
 
 def test_combined_catalog_prefers_hubitat_for_shared_devices(home):
@@ -121,3 +123,17 @@ def test_homekit_down_does_not_break_hubitat(ctx, home):
     home.homekit._cache = None
     res = h_home(route("Turn off the master bedroom light", ctx.cfg), ctx)
     assert res.state == "done" and home.hub_calls == ["/devices/8/off"]
+
+
+@pytest.mark.parametrize("say,control", [
+    ("Set the office fan to low", {"name": "FAN-1", "action": "speed", "value": 33}),
+    ("Set the office fan to medium", {"name": "FAN-1", "action": "speed", "value": 66}),
+    ("Set the office fan to high", {"name": "FAN-1", "action": "speed", "value": 100}),
+    ("Set the office fan to medium high", {"name": "FAN-1", "action": "speed", "value": 83}),
+    ("Set the office fan to 40%", {"name": "FAN-1", "action": "speed", "value": 40}),
+    ("Turn off the office fan", {"name": "FAN-1", "action": "off"}),
+])
+def test_homekit_fan_speeds(ctx, home, say, control):
+    res = h_home(route(say, ctx.cfg), ctx)
+    assert res.state == "done", res.summary
+    assert home.bridge.controls == [control]

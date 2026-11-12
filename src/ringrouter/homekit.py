@@ -19,13 +19,16 @@ TYPE_CAPS = {
     "light": {"Switch", "SwitchLevel"},
     "switch": {"Switch"},
     "outlet": {"Switch"},
-    "fan": {"Switch"},
+    "fan": {"Switch", "FanControl", "SwitchLevel"},   # speed is a 0-100 rotation speed
     "lock": {"Lock"},
     "garage_door": {"DoorControl"},
 }
 # router command -> HomeMCPBridge control_device action
 HK_ACTIONS = {"on": "on", "off": "off", "lock": "lock", "unlock": "unlock", "open": "open", "close": "close",
-              "setLevel": "brightness"}
+              "setLevel": "brightness", "setSpeed": "speed"}
+# HomeKit fans take a 0-100 rotation speed; spoken speed words map onto it (Hubitat snaps the
+# same words to its own low/medium/high).
+FAN_SPEED_PCT = {"low": 33, "medium-low": 50, "medium": 66, "medium-high": 83, "high": 100}
 
 
 def _norm(s: str) -> str:
@@ -56,14 +59,23 @@ class HomeKit:
                 if any(m in _norm(d.get("manufacturer") or "") for m in self.skip_manufacturers):
                     continue      # bridged in from Hubitat: Hubitat controls it directly
                 out.append(Device(id=d["id"], label=d.get("name", ""), room=d.get("room") or "", caps=set(caps),
-                                  backend="homekit"))
+                                  attrs={"type": d.get("type")}, backend="homekit"))
             self._cache, self._cache_t = out, time.time()
         return self._cache
 
     def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
+        is_fan = device.attrs.get("type") == "fan"
+        if is_fan and cmd == "setLevel":
+            cmd = "setSpeed"                                   # "set the fan to 40%" -> rotation speed 40
         action = HK_ACTIONS.get(cmd)
         if not action:
             raise RuntimeError(f"HomeKit can't {cmd} {device.label}")
+        if cmd == "setSpeed":
+            if not is_fan:
+                raise RuntimeError(f"{device.label} isn't a fan")
+            value = FAN_SPEED_PCT.get(str(value), value)
+            if not str(value).isdigit():
+                raise RuntimeError(f"HomeKit fans don't support speed {value!r}")
         args = {"name": device.id, "action": action}          # patched bridge accepts the exact id
         if value is not None:
             args["value"] = int(value) if str(value).isdigit() else value

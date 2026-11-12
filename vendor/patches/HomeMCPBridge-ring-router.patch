@@ -1,6 +1,20 @@
 --- a/HomeMCPBridge/main.swift
 +++ b/HomeMCPBridge/main.swift
-@@ -387,7 +387,8 @@
+@@ -2,6 +2,13 @@
+ import HomeKit
+ import UIKit
+ import Network
++
++// ring-router patch: HomeKit's newer fan service (Fan v2) and its Active characteristic have no
++// named HMServiceType constant in every SDK, so compare by UUID. Fans exposed this way (e.g. GE
++// fan controllers bridged from Hubitat) were reported as "unknown" and couldn't be controlled.
++let kServiceTypeFanV2 = "000000B7-0000-1000-8000-0026BB765291"
++let kCharacteristicTypeActive = "000000B0-0000-1000-8000-0026BB765291"
++func isFanService(_ t: String) -> Bool { t == HMServiceTypeFan || t.uppercased() == kServiceTypeFanV2 }
+ 
+ #if targetEnvironment(macCatalyst)
+ import AppKit
+@@ -387,7 +394,8 @@
          let searchName = name.lowercased()
          for plugin in activePlugins() {
              if let devices = try? await plugin.listDevices(),
@@ -10,7 +24,7 @@
                  return (device, plugin)
              }
          }
-@@ -418,15 +419,24 @@
+@@ -418,15 +426,24 @@
  
      // Expose homeManager for CameraManager and MotionSensorManager
      var homeManager: HMHomeManager { return _homeManager }
@@ -37,7 +51,7 @@
      }
  
      override init() {
-@@ -460,7 +470,7 @@
+@@ -460,7 +477,7 @@
      // MARK: - Tool Implementations
  
      func listHomes() -> [[String: Any]] {
@@ -46,7 +60,7 @@
              [
                  "id": home.uniqueIdentifier.uuidString,
                  "name": home.name,
-@@ -473,7 +483,7 @@
+@@ -473,7 +490,7 @@
  
      func listRooms() -> [[String: Any]] {
          var rooms: [[String: Any]] = []
@@ -55,7 +69,7 @@
              for room in home.rooms {
                  rooms.append([
                      "id": room.uniqueIdentifier.uuidString,
-@@ -488,7 +498,7 @@
+@@ -488,7 +505,7 @@
  
      func listDevices() -> [[String: Any]] {
          var devices: [[String: Any]] = []
@@ -64,7 +78,53 @@
              for accessory in home.accessories {
                  devices.append(accessoryToDict(accessory, homeName: home.name))
              }
-@@ -622,8 +632,9 @@
+@@ -511,7 +528,7 @@
+         let controllableService = accessory.services.first { service in
+             [HMServiceTypeLightbulb, HMServiceTypeSwitch, HMServiceTypeOutlet,
+              HMServiceTypeFan, HMServiceTypeGarageDoorOpener, HMServiceTypeLockMechanism]
+-                .contains(service.serviceType)
++                .contains(service.serviceType) || isFanService(service.serviceType)
+         }
+ 
+         guard let service = controllableService else {
+@@ -534,6 +551,14 @@
+                 group.leave()
+             }
+         }
++        // ring-router patch: report the service and the rotation-speed range so speed mapping can be checked
++        state["serviceType"] = service.serviceType
++        state["services"] = accessory.services.map { $0.serviceType }
++        if let rs = service.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeRotationSpeed }),
++           let md = rs.metadata {
++            state["rotationSpeedMeta"] = ["min": md.minimumValue ?? -1, "max": md.maximumValue ?? -1,
++                                          "step": md.stepValue ?? -1, "format": md.format ?? "?"]
++        }
+ 
+         group.notify(queue: .main) {
+             if let on = chars["PowerState"] as? Bool {
+@@ -576,7 +601,7 @@
+         let controllableService = accessory.services.first { service in
+             [HMServiceTypeLightbulb, HMServiceTypeSwitch, HMServiceTypeOutlet,
+              HMServiceTypeFan, HMServiceTypeGarageDoorOpener, HMServiceTypeLockMechanism]
+-                .contains(service.serviceType)
++                .contains(service.serviceType) || isFanService(service.serviceType)
+         }
+ 
+         guard let service = controllableService else {
+@@ -605,6 +630,12 @@
+             } else {
+                 completion(["error": "Invalid color (need hue, saturation)", "success": false])
+             }
++        case "speed", "set_speed", "rotation_speed":
++            if let v = value as? Int ?? (value as? Double).map({ Int($0) }) ?? Int(value as? String ?? "") {
++                setRotationSpeed(service, value: v, completion: completion)
++            } else {
++                completion(["error": "Invalid speed (0-100)", "success": false])
++            }
+         case "lock":
+             setLock(service, locked: true, completion: completion)
+         case "unlock":
+@@ -622,8 +653,9 @@
  
      private func findAccessory(name: String) -> (HMAccessory, HMHome)? {
          let searchName = name.lowercased()
@@ -76,7 +136,68 @@
                  return (acc, home)
              }
          }
-@@ -2191,7 +2202,7 @@
+@@ -638,6 +670,7 @@
+             case HMServiceTypeSwitch: type = "switch"
+             case HMServiceTypeOutlet: type = "outlet"
+             case HMServiceTypeFan: type = "fan"
++            case let t where t.uppercased() == kServiceTypeFanV2: type = "fan"
+             case HMServiceTypeGarageDoorOpener: type = "garage_door"
+             case HMServiceTypeLockMechanism: type = "lock"
+             case HMServiceTypeThermostat: type = "thermostat"
+@@ -665,6 +698,7 @@
+         case HMServiceTypeSwitch: return "switch"
+         case HMServiceTypeOutlet: return "outlet"
+         case HMServiceTypeFan: return "fan"
++        case let t where t.uppercased() == kServiceTypeFanV2: return "fan"
+         case HMServiceTypeGarageDoorOpener: return "garage_door"
+         case HMServiceTypeLockMechanism: return "lock"
+         default: return "unknown"
+@@ -682,11 +716,21 @@
+         case HMCharacteristicTypeTargetDoorState: return "TargetDoorState"
+         case "00000019-0000-1000-8000-0026BB765291": return "LockCurrentState"
+         case "00000020-0000-1000-8000-0026BB765291": return "LockTargetState"
++        case HMCharacteristicTypeRotationSpeed: return "RotationSpeed"
++        case kCharacteristicTypeActive: return "Active"
+         default: return type
+         }
+     }
+ 
+     private func setPower(_ service: HMService, value: Bool, completion: @escaping ([String: Any]) -> Void) {
++        if service.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypePowerState }) == nil,
++           let active = service.characteristics.first(where: { $0.characteristicType.uppercased() == kCharacteristicTypeActive }) {
++            active.writeValue(value ? 1 : 0) { error in
++                if let error = error { completion(["error": error.localizedDescription, "success": false]) }
++                else { completion(["success": true, "action": value ? "on" : "off"]) }
++            }
++            return
++        }
+         guard let char = service.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypePowerState }) else {
+             completion(["error": "No power characteristic", "success": false])
+             return
+@@ -713,6 +757,22 @@
+                 } else {
+                     completion(["success": true, "action": "toggle", "newState": !current])
+                 }
++            }
++        }
++    }
++
++    private func setRotationSpeed(_ service: HMService, value: Int, completion: @escaping ([String: Any]) -> Void) {
++        guard let char = service.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeRotationSpeed }) else {
++            completion(["error": "No rotation speed characteristic", "success": false])
++            return
++        }
++        let clamped = min(100, max(0, value))
++        // RotationSpeed is a float characteristic; an Int write is acknowledged but ignored by some bridges.
++        char.writeValue(NSNumber(value: Double(clamped))) { error in
++            if let error = error {
++                completion(["error": error.localizedDescription, "success": false])
++            } else {
++                completion(["success": true, "speed": clamped])
+             }
+         }
+     }
+@@ -2191,7 +2251,7 @@
  
      func listCameras() -> [[String: Any]] {
          var cameras: [[String: Any]] = []
@@ -85,7 +206,7 @@
              for accessory in home.accessories {
                  for profile in accessory.profiles {
                      if let cameraProfile = profile as? HMCameraProfile {
-@@ -2288,7 +2299,7 @@
+@@ -2288,7 +2348,7 @@
  
      private func findCamera(name: String) -> HMAccessory? {
          let searchName = name.lowercased()
@@ -94,7 +215,7 @@
              for accessory in home.accessories {
                  if accessory.name.lowercased() == searchName,
                     accessory.profiles.contains(where: { $0 is HMCameraProfile }) {
-@@ -2340,7 +2351,7 @@
+@@ -2340,7 +2400,7 @@
  
      func listMotionSensors() -> [[String: Any]] {
          var sensors: [[String: Any]] = []
@@ -103,7 +224,7 @@
              for accessory in home.accessories {
                  for service in accessory.services {
                      let type: String?
-@@ -2417,7 +2428,7 @@
+@@ -2417,7 +2477,7 @@
      }
  
      func subscribeToEvents() {
@@ -112,7 +233,7 @@
              for accessory in home.accessories {
                  accessory.delegate = self
                  for service in accessory.services {
-@@ -2497,7 +2508,7 @@
+@@ -2497,7 +2557,7 @@
          default: eventType = "unknown"
          }
  
@@ -121,7 +242,7 @@
  
          let event = MotionEvent(
              id: UUID().uuidString,
-@@ -2530,7 +2541,7 @@
+@@ -2530,7 +2590,7 @@
  
      private func findMotionSensor(name: String) -> (HMAccessory, HMHome)? {
          let searchName = name.lowercased()
@@ -130,7 +251,7 @@
              for accessory in home.accessories where accessory.name.lowercased() == searchName {
                  if accessory.services.contains(where: {
                      $0.serviceType == HMServiceTypeMotionSensor ||
-@@ -2816,7 +2827,7 @@
+@@ -2816,7 +2876,7 @@
      func listEventProducingDevices() -> [[String: Any]] {
          var devices: [[String: Any]] = []
  
@@ -139,7 +260,7 @@
              for accessory in home.accessories {
                  for service in accessory.services {
                      var deviceType: String?
-@@ -2864,7 +2875,7 @@
+@@ -2864,7 +2924,7 @@
      static let shared = ContactSensorManager()
  
      func subscribeToEvents() {
@@ -148,7 +269,7 @@
              for accessory in home.accessories {
                  for service in accessory.services {
                      if service.serviceType == HMServiceTypeContactSensor {
-@@ -2888,7 +2899,7 @@
+@@ -2888,7 +2948,7 @@
  
      func listContactSensors() -> [[String: Any]] {
          var sensors: [[String: Any]] = []
@@ -157,7 +278,7 @@
              for accessory in home.accessories {
                  for service in accessory.services where service.serviceType == HMServiceTypeContactSensor {
                      sensors.append([
-@@ -2961,7 +2972,7 @@
+@@ -2961,7 +3021,7 @@
  
          // ContactState: 0 = detected (closed), 1 = not detected (open)
          let isOpen = contactValue == 1
@@ -166,7 +287,7 @@
  
          log("Contact: \(accessory.name) -> \(isOpen ? "OPEN" : "closed")")
  
-@@ -2977,7 +2988,7 @@
+@@ -2977,7 +3037,7 @@
  
      private func findContactSensor(name: String) -> (HMAccessory, HMHome)? {
          let searchName = name.lowercased()
