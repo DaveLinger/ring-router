@@ -159,8 +159,8 @@ A near miss (tier 2) must be spelled alike **and** sound alike, and either end t
 refused; so is a possessive ("Terri's mom") and, for multi-word names, anything whose last word doesn't
 sound the same ("the guy", "the gym" for "the guys"). A bare name with no verb needs a pause after it
 ("Instinct, ..."). "Ask <unknown name> what/about ..." goes to the agent ("ask Google what time it is").
-A cancel phrase directly after the recipient is the message ("tell Terri never mind" sends "Never
-mind"); after a sentence break or anything else, it cancels.
+A command ending in a strong cancel phrase is always cancelled, so "tell Terri never mind" can't be
+sent as a message: a known limit, accepted to keep cancelling simple and independent of punctuation.
 
 Names match by spelling **and** sound. "Hey X" / "X, …" is direct speech (sent as spoken); only
 "ask X…" is rewritten into a direct question. "Tell X to grab milk" sends "Grab milk".

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import cancel, recipients
-from .text import SEP, capitalize_first, clean, match_prefix, phrase_pattern, simple, strip_body
+from .text import SEP, capitalize_first, clean, match_prefix, simple, strip_body
 
 QUESTION_WORDS = ("what", "what's", "whats", "when", "when's", "where", "where's", "who", "who's",
                   "which", "did", "does", "do", "is", "are", "was", "were", "has", "have", "how",
@@ -47,7 +47,7 @@ def route(transcript: str, cfg) -> Route:
     # 1. cancel -------------------------------------------------------------
     c = raw.get("cancel", {})
     phrase = cancel.detect(t, c.get("strong", []), c.get("weak", []))
-    if phrase and not _cancel_is_the_message(t, phrase, raw):
+    if phrase:
         return Route("cancelled", t, params={"phrase": phrase}, reason=f"ends with cancel phrase {phrase!r}")
 
     # 2. scenes: exact whole-transcript match ---------------------------------
@@ -75,24 +75,6 @@ def route(transcript: str, cfg) -> Route:
 
 
 # ------------------------------------------------------------------- helpers --
-
-# What may stand between the recipient and a cancel phrase for the phrase to be the message itself:
-# "tell Terri never mind", "tell Terri to cancel that", "ask Terri if we should abort".
-CANCEL_LEADS = {"", "to", "that", "to just", "just", "we should", "if we should", "whether we should", "if i should",
-                "whether i should", "whether to"}
-
-
-def _cancel_is_the_message(t: str, phrase: str, raw: dict) -> bool:
-    """"Tell Terri never mind" sends "Never mind"; "Tell Terri I'm late. Never mind." cancels.
-    Only when the phrase follows the recipient directly (no sentence break, nothing else said)."""
-    if re.search(cancel.BREAK + r"\s*" + phrase_pattern(phrase) + SEP + r"*$", t, re.IGNORECASE):
-        return False
-    r = _message(t, raw)
-    if not r or r.route != "imessage" or r.verb == "bare":
-        return False
-    body, tail = simple(r.body), simple(phrase)
-    return body.endswith(tail) and body[:len(body) - len(tail)].strip() in CANCEL_LEADS
-
 
 VERBS_ASK = ("ask", "hey", "yo")
 VERBS_TELL = ("tell", "message", "text", "send a message to", "send a text to", "let")

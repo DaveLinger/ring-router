@@ -11,7 +11,7 @@ a light switch, or a question to the AI model of your choice.
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Core](https://img.shields.io/badge/core-stdlib%20only-success)
 ![Platform](https://img.shields.io/badge/platform-macOS%2027-000000?logo=apple&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-486-brightgreen)
+![Tests](https://img.shields.io/badge/tests-482-brightgreen)
 ![Status](https://img.shields.io/badge/status-live%20(test%20recipients)-yellow)
 
 [How it works](#how-it-works) · [What you can say](#what-you-can-say) · [Safety](#safety) ·
@@ -95,7 +95,7 @@ Three ideas hold it together:
 | *"Turn off the living room lights"* · *"Kitchen lights off"* · *"Turn the lights off in the kitchen"* | 💡 Every light in that room |
 | *"Set the master bedroom fan to low"* · *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
 | *"Turn on the living room fan"* | 🌀 "Fan" means the ceiling fan when several match; otherwise it asks "Which one?" |
-| *"Lock the garage patio door"* · *"Unlock the front door"* · *"Open the front garage door"* | 🔒 Run as spoken (confirm-first is opt-in) |
+| *"Lock the garage patio door"* · *"Open the front garage door"* | 🔒 Run as spoken (confirm-first is opt-in). Locks that exist only in HomeKit don't work yet: see [Status](#status) |
 | *"Turn off everything"* | 💡 Everything switchable except outlets and plugs |
 | *"Goodnight"* (the whole phrase) | 🌙 A scene: a fixed list of device actions |
 | *"Is the garage door closed?"* · *"Which kitchen lights are on?"* | 🧠 The agent reads the device state |
@@ -127,8 +127,8 @@ Three ideas hold it together:
 - **No guessing at numbers.** The number is the `handle` in your config, or the one Contacts card
   with that exact name. No card, or two, and nothing is sent.
 - **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt shows the exact text sent.
-- **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
-  ("Tell Terri never mind", with nothing in between, sends "Never mind".)
+- **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"… It always
+  cancels, so "tell Terri never mind" can't be sent as a message (a known limit).
 
 </details>
 
@@ -216,11 +216,32 @@ cp launchd/local.ring-router{,.watchdog,.selftest}.plist ~/Library/LaunchAgents/
 for job in local.ring-router local.ring-router.watchdog local.ring-router.selftest; do
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/$job.plist
 done
-tailscale funnel --bg 8642           # public HTTPS address for the Pebble app and Pushcut buttons
 ```
 
-Set `[server] public_url` to the Funnel address. Restart after code or config changes with
-`launchctl kickstart -k gui/$(id -u)/local.ring-router`.
+Then publish it (next section), set `[server] public_url` to the Funnel address, and restart after
+code or config changes with `launchctl kickstart -k gui/$(id -u)/local.ring-router`.
+
+### Publish only what must be public
+
+The Pebble app and Pushcut reach the Mac through [Tailscale Funnel](https://tailscale.com/kb/1223/funnel).
+Four paths need to be on the internet: `/hook` (the Pebble app), `/confirm` (Pushcut buttons),
+`/answers` ("Full answer" links) and `/health` (the watchdog). The activity page shows every
+transcript and message, so it is served to your own tailnet only, on a second port. (Funnel is
+switched on per port, which is why it needs one.)
+
+```sh
+for p in hook confirm answers health; do
+  tailscale funnel --bg --set-path /$p http://127.0.0.1:8642/$p
+done
+tailscale serve --bg --https=10000 --set-path /activity http://127.0.0.1:8642/activity   # tailnet only
+tailscale funnel status
+```
+
+The activity page is then `https://<your-mac>.ts.net:10000/activity/<token>`, from devices signed
+in to your tailnet. On macOS the CLI is `/Applications/Tailscale.app/Contents/MacOS/Tailscale` if
+`tailscale` isn't on your PATH. If you started with `tailscale funnel --bg 8642` (everything
+public), remove that mount with `tailscale funnel --https=443 --set-path / off`. Don't use
+`tailscale funnel reset` if other ports on the machine are funnelled: it clears them all.
 
 <details>
 <summary><b>Why "Ring Router.app", and granting macOS permissions</b></summary>
@@ -241,30 +262,6 @@ mcp-macos is vendored in `vendor/` because npm blocks the install script that co
 helper, and because ring-router patches that helper (`vendor/patches/`): `[calendars] sources =
 ["iCloud"]` hides other accounts, such as a Google account that calsync mirrors into iCloud, which
 would otherwise make every event appear twice.
-</details>
-
-<details>
-<summary><b>Publishing only what must be public</b></summary>
-
-`tailscale funnel --bg 8642` puts the whole listener on the internet, including the activity page
-(guarded only by the token in its URL). Only four paths need to be public: `/hook` (the Pebble
-app), `/confirm` (Pushcut buttons), `/answers` ("Full answer" links) and `/health` (the watchdog).
-Funnel is switched on per port, so the split is: those four paths on 443, and the activity page on
-a second port served to your tailnet only.
-
-```sh
-for p in hook confirm answers health; do
-  tailscale funnel --bg --set-path /$p http://127.0.0.1:8642/$p
-done
-tailscale funnel --https=443 --set-path / off                # stop publishing everything else
-tailscale serve --bg --https=10000 --set-path /activity http://127.0.0.1:8642/activity   # tailnet only
-tailscale funnel status
-```
-
-The activity page is then `https://<your-mac>.ts.net:10000/activity/<token>`, reachable only from
-devices signed in to your tailnet. To go back: `tailscale funnel --bg 8642`. Check
-`tailscale funnel status` after each step, and don't use `tailscale funnel reset` if other ports on
-this machine are funnelled: it clears them all.
 </details>
 
 ### Configuration
@@ -297,7 +294,7 @@ Add keys with `ring-router set-secret openrouter_api_key` (or `pushcut_webhook_u
 
 **Keeping an eye on it**
 
-- **Activity page** at `/activity/<activity_token>`: recent commands with outcome and model cost.
+- **Activity page** at `/activity/<activity_token>` (tailnet-only port, see above): recent commands with outcome and model cost.
   Tap one for its step-by-step trace: the exact transcript, the route decision, what the on-device
   model was given and returned, the date the code settled on, every agent tool call, device matches,
   each command sent to macOS or the house with its result, and the reply the Pebble app saw.
@@ -330,7 +327,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 `--recorded-ago 3600` (an old recording), `--file tests/phrases.toml` (the whole answer key).
 
 ```sh
-.venv/bin/pytest -q               # everything (486 tests)
+.venv/bin/pytest -q               # everything (482 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
 .venv/bin/pytest -m live          # only those: exact message text, and reminder and calendar
                                   # times with the real model in the loop
@@ -357,10 +354,14 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Pushcut notifications and buttons | ✅ Send/Cancel and Full answer verified through the tunnel |
 | Ask a model, research notes: OpenRouter, web search, follow-ups, answer page | ✅ Live-tested with all four models; saving a research note waits on the Notes permission |
 | General agent: macOS tools, web search, follow-ups, `run_command`, write-intent gate | ✅ Live: read the real calendar, then moved an event as a follow-up |
-| Home: HomeKit via a patched HomeMCPBridge, Hubitat as an optional module | ✅ Live (lights, dimmers, fans, locks, garage doors) |
+| Home: HomeKit via a patched HomeMCPBridge, Hubitat as an optional module | ✅ Live for lights, dimmers, fans, garage doors and Hubitat locks |
+| HomeKit-only locks (e.g. Laundry Room Door) | ❌ Lock, unlock and lock state fail ("No lock characteristic"): HomeMCPBridge uses the wrong HomeKit characteristic IDs. The fix is two lines in the bridge patch plus a rebuild |
+| Tailscale Funnel limited to `/hook`, `/confirm`, `/answers`, `/health`; activity page tailnet-only | ✅ Live |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
 | Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
-| Agent home tools; lock and door read-back; daily self-test | 🟡 Built and tested with fakes; not yet tried against the real devices |
+| Daily self-test | ✅ Installed; first run passed all eight checks |
+| Agent home tools | 🟡 Tried live: the agent found the right device and went through the home route for both a state question and a lock; both stopped at the HomeKit lock bug above |
+| Lock and door read-back (`[home] read_back`) | 🟡 Tested with fakes; state reading verified against the real Hubitat locks; not yet run end to end on a real device |
 | Claude Code per host | ⬜ Stub; needs SSH to the VPS |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the

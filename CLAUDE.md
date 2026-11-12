@@ -67,6 +67,10 @@ traffic). Code-level review can't confirm these. Flag assumptions instead.
 - **HomeKit fan speed:** RotationSpeed writes are acknowledged but ignored by the bridged fans, so
   Hubitat stays on for fan speeds.
 - **Cameras:** HomeMCPBridge snapshots crash on Catalyst.
+- **HomeKit-only locks don't work:** HomeMCPBridge reads and writes lock state with the wrong
+  characteristic IDs (`...19` / `...20`; HomeKit's are `HMCharacteristicTypeCurrentLockMechanismState`
+  and `HMCharacteristicTypeTargetLockMechanismState`), so lock, unlock and lock state fail with "No
+  lock characteristic". Fixing it means changing the bridge patch and rebuilding the bridge: ask first.
 - **Send delay / Undo Send:** deferred.
 - **Claude Code per host:** a stub (needs SSH to a VPS).
 - `live_recipients` still limits real sends to the owner.

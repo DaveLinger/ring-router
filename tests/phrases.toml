@@ -560,28 +560,15 @@ route = "agent"
 say = "The lights are off"
 route = "agent"
 
-# A cancel phrase right after the recipient is the message; after a break, or after anything
-# else was said, it cancels.
+# A command that ends in a strong cancel phrase is cancelled, whatever came before. Known limit:
+# "tell Terri never mind" can't be sent as a message. (Transcripts aren't assumed to carry commas,
+# so nothing here depends on punctuation.)
 [[case]]
 say = "Tell Terri never mind"
-sends = "Never mind"
-route = "imessage"
-extracted = "Never mind"
+route = "cancelled"
 
 [[case]]
 say = "Tell Terri to cancel that"
-sends = "Cancel that"
-route = "imessage"
-extracted = "Cancel that"
-
-[[case]]
-say = "Ask Terri if we should abort"
-route = "imessage"
-rewrite = "ask_question"
-extracted = "if we should abort"
-
-[[case]]
-say = "Tell Terri, never mind"
 route = "cancelled"
 
 [[case]]
