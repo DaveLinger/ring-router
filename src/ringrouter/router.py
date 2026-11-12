@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import cancel, recipients
-from .text import SEP, capitalize_first, clean, match_prefix, simple, strip_body
+from .text import SEP, capitalize_first, clean, match_prefix, phrase_pattern, simple, strip_body
 
 QUESTION_WORDS = ("what", "what's", "whats", "when", "when's", "where", "where's", "who", "who's",
                   "which", "did", "does", "do", "is", "are", "was", "were", "has", "have", "how",
@@ -47,7 +47,7 @@ def route(transcript: str, cfg) -> Route:
     # 1. cancel -------------------------------------------------------------
     c = raw.get("cancel", {})
     phrase = cancel.detect(t, c.get("strong", []), c.get("weak", []))
-    if phrase:
+    if phrase and not _cancel_is_the_message(t, phrase, raw):
         return Route("cancelled", t, params={"phrase": phrase}, reason=f"ends with cancel phrase {phrase!r}")
 
     # 2. scenes: exact whole-transcript match ---------------------------------
@@ -58,7 +58,7 @@ def route(transcript: str, cfg) -> Route:
 
     # 3. prefix routes ---------------------------------------------------------
     for fn in (_claude_code, _research, _ask_model, _note, _remember, _shopping, _reminder,
-               _calendar, _home, _message):
+               _calendar, _home, _message, _home_suffix):
         r = fn(t, raw)
         if r:
             return r
@@ -75,6 +75,24 @@ def route(transcript: str, cfg) -> Route:
 
 
 # ------------------------------------------------------------------- helpers --
+
+# What may stand between the recipient and a cancel phrase for the phrase to be the message itself:
+# "tell Terri never mind", "tell Terri to cancel that", "ask Terri if we should abort".
+CANCEL_LEADS = {"", "to", "that", "to just", "just", "we should", "if we should", "whether we should", "if i should",
+                "whether i should", "whether to"}
+
+
+def _cancel_is_the_message(t: str, phrase: str, raw: dict) -> bool:
+    """"Tell Terri never mind" sends "Never mind"; "Tell Terri I'm late. Never mind." cancels.
+    Only when the phrase follows the recipient directly (no sentence break, nothing else said)."""
+    if re.search(cancel.BREAK + r"\s*" + phrase_pattern(phrase) + SEP + r"*$", t, re.IGNORECASE):
+        return False
+    r = _message(t, raw)
+    if not r or r.route != "imessage" or r.verb == "bare":
+        return False
+    body, tail = simple(r.body), simple(phrase)
+    return body.endswith(tail) and body[:len(body) - len(tail)].strip() in CANCEL_LEADS
+
 
 VERBS_ASK = ("ask", "hey", "yo")
 VERBS_TELL = ("tell", "message", "text", "send a message to", "send a text to", "let")
@@ -165,6 +183,8 @@ def _remember(t: str, raw: dict) -> Route | None:
     body = strip_body(t[m[1]:])
     if not body:
         return None
+    if t.rstrip().endswith("?") and simple(body).split(" ", 1)[0] in ("when", "how", "what", "where", "who", "why"):
+        return None     # "Remember when we went to Paris?" is a question, not something to file
     return Route("remember", t, body=capitalize_first(body),
                  params={"folder": raw.get("notes", {}).get("remember_folder", "Remember")},
                  reason="remember prefix")
@@ -223,14 +243,26 @@ def _calendar(t: str, raw: dict) -> Route | None:
         return Route("calendar", t, body=strip_body(t[v[1]:m.start()]), params={"calendar": calendar},
                      reason="calendar suffix")
     s = match_prefix(t, ["schedule", "create an event", "make an event"])
+    if s and re.match(r"(?:a|an)\s+(?:text|message|email|imessage)\b", t[s[1]:], re.IGNORECASE):
+        return Route("refuse", t, params={"rule": "scheduled_send",
+                                          "message": "Scheduled messages aren't supported. Nothing sent or added."},
+                     reason="schedule a message")
     if s:
         return Route("calendar", t, body=strip_body(t[s[1]:]), params={"calendar": cals.get("default")},
                      reason="calendar prefix")
     return None
 
 
-HOME_VERBS = ["turn on", "turn off", "switch on", "switch off", "turn up", "turn down", "dim", "brighten",
-              "unlock", "lock", "open", "close", "set", "turn", "switch"]
+HOME_VERBS = ["turn on", "turn off", "switch on", "switch off", "shut off", "turn up", "turn down", "dim", "brighten",
+              "unlock", "lock", "open", "close", "set", "turn", "switch", "shut", "kill"]
+DOOR_WORDS = r"\b(garage|door|gate|blinds?|shades?|curtains?)\b"
+DEVICE_WORDS = r"(?:lights?|lamps?|fans?|sconces?|pendants?|switch|outlet|plug)"
+
+
+def _room_first(rest: str) -> str:
+    """"the lights in the kitchen" -> "the kitchen lights" (the matcher wants the room first)."""
+    m = re.match(rf"(?:the\s+|my\s+)?({DEVICE_WORDS})\s+in\s+(?:the\s+|my\s+)?(.+?)(\s+to\s+.+)?$", rest, re.IGNORECASE)
+    return f"the {m.group(2)} {m.group(1)}{m.group(3) or ''}" if m else rest
 
 
 def _home(t: str, raw: dict) -> Route | None:
@@ -239,15 +271,34 @@ def _home(t: str, raw: dict) -> Route | None:
         return None
     verb, pos = m
     rest = strip_body(t[pos:])
+    if verb in ("set", "turn", "switch") and re.match(r"(?:the\s+|my\s+|a\s+|an\s+)?(alarm|timer)\b", rest, re.IGNORECASE):
+        return Route("refuse", t, params={"rule": "timers", "message": raw.get("refuse", {}).get("timers", {}).get(
+            "message", "Timers and alarms aren't supported from the ring.")}, reason="alarm or timer")
+    if verb == "set" and re.match(r"up\b", rest, re.IGNORECASE):
+        return None  # "set up a meeting with Terri to go over the budget"
+    if verb == "kill" and not re.search(rf"\b{DEVICE_WORDS}\b", rest, re.IGNORECASE):
+        return None  # "kill the build" is not about a lamp
     if verb == "set" and not re.search(r"\bto\b", rest, re.IGNORECASE):
         return None  # "set a reminder"/"set a timer" etc. are not home commands
     if verb == "set" and re.match(r"(a|an)\b", rest, re.IGNORECASE):
         return None
-    if verb in ("open", "close") and not re.search(r"\b(garage|door|gate|blinds?|shades?|curtains?)\b", rest, re.I):
-        return None
-    action = {"switch on": "on", "turn on": "on", "switch off": "off", "turn off": "off"}.get(verb, verb)
+    action = {"switch on": "on", "turn on": "on", "switch off": "off", "turn off": "off", "shut off": "off",
+              "kill": "off"}.get(verb, verb)
+    # "turn the lights off in the kitchen" -> "turn the kitchen lights off"
+    mid = re.match(r"(.+?)\s+(on|off)\s+in\s+(?:the\s+|my\s+)?(.+)$", rest, re.IGNORECASE)
+    if mid and verb in ("turn", "switch", "shut"):
+        thing = re.sub(r"^(?:the|my)\s+", "", mid.group(1), flags=re.IGNORECASE)
+        rest = f"the {mid.group(3)} {thing} {mid.group(2)}"
+    rest = _room_first(rest)
     # "turn the living room light on" form
     tail = re.search(SEP + r"+(on|off)" + SEP + r"*$", rest, re.IGNORECASE)
+    if verb == "shut":                  # "shut the lights off" switches; "shut the garage" closes
+        if tail and tail.group(1).lower() == "off":
+            action, rest = "off", rest[:tail.start()].strip()
+        else:
+            verb = action = "close"
+    if verb in ("open", "close") and not re.search(DOOR_WORDS, rest, re.I):
+        return None
     if verb in ("turn", "switch"):
         if tail:
             action = tail.group(1).lower()
@@ -261,8 +312,25 @@ def _home(t: str, raw: dict) -> Route | None:
                  reason="home control verb")
 
 
+def _home_suffix(t: str, raw: dict) -> Route | None:
+    """"Kitchen lights off" / "Lights on": no verb, a device word, then on or off. Nothing else."""
+    m = re.match(rf"((?:[\w']+\s+){{0,4}}{DEVICE_WORDS})\s+(on|off)" + SEP + r"*$", t, re.IGNORECASE)
+    if not m:
+        return None
+    action = m.group(2).lower()
+    return Route("home", t, body=m.group(1), verb="suffix",
+                 params={"action": action, "confirm": action in raw.get("home", {}).get("confirm_actions", [])},
+                 reason="device then on/off")
+
+
 def _message(t: str, raw: dict) -> Route | None:
     recips = raw.get("recipients", {})
+    sm = match_prefix(t, ["send"])
+    if sm:                                    # "send Terri a text (that / saying) I'm late"
+        rm = recipients.resolve(t, sm[1], recips)
+        k = rm and match_prefix(t, ["a text message", "a message", "a text"], rm.end)
+        if k:
+            return _message_route(t, rm, "tell", t[k[1]:])
     v = match_prefix(t, list(VERBS_ASK + VERBS_TELL))
     if v:
         verb, pos = v
@@ -279,6 +347,10 @@ def _message(t: str, raw: dict) -> Route | None:
             return None
         if verb in VERBS_ASK and verb != "ask" and rm.tier == "unknown":
             return None   # "hey so I was thinking..." is just talk, not a message to someone named "so"
+        if verb == "ask" and rm.tier == "unknown":
+            nxt = simple(t[rm.end:]).split(" ", 1)[0]
+            if nxt in QUESTION_WORDS or nxt == "about":
+                return None   # "ask Google what time it is": a question for the agent, not a message
         # "ask X ..." is indirect speech (rewrite); "hey X, ..." is direct address (send as spoken)
         kind = "ask" if verb == "ask" else "hey" if verb in VERBS_ASK else "tell"
         return _message_route(t, rm, kind, t[rm.end:])
@@ -304,6 +376,8 @@ def _message_route(t: str, rm, kind: str, rest: str, bare: bool = False) -> Rout
         low = body.lower()
         if low.startswith("that "):
             body = body[5:]
+        elif low.startswith("saying "):
+            body = body[7:]
         elif low.startswith("to "):
             body = capitalize_first(body[3:])  # "tell terri to grab milk" -> "Grab milk"
         body = capitalize_first(body)

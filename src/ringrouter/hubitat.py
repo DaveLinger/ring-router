@@ -171,6 +171,10 @@ def _match(self, target: str, action: str) -> Match:
     if not tw:
         return Match([], "none", "no device named")
 
+    if action in ("open", "close") and tw == ["door"]:
+        # "open the door" names no door, and the only thing that opens is the garage: ask, don't guess
+        return Match(pool[:4], "ambiguous" if pool else "none", "which door?")
+
     alias = self.aliases.get(re.sub(r"^(the|my)\s+", "", t))
     if alias:
         hits = [d for d in pool if d.label.lower() == alias.lower()]

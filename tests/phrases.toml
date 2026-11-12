@@ -487,3 +487,184 @@ route = "agent"
 [[case]]
 say = "Do not open the garage"
 route = "agent"
+
+# ------------------------------------- natural phrasing (November 2026 review) --
+[[case]]
+say = "Set up a meeting with Terri to go over the budget"
+route = "agent"
+
+[[case]]
+say = "Set my alarm to 7"
+route = "refuse"
+rule = "timers"
+
+[[case]]
+say = "Set the timer to 10 minutes"
+route = "refuse"
+rule = "timers"
+
+[[case]]
+say = "Turn the lights off in the kitchen"
+route = "home"
+action = "off"
+extracted = "the kitchen lights"
+
+[[case]]
+say = "Turn off the lights in the kitchen"
+route = "home"
+action = "off"
+extracted = "the kitchen lights"
+
+[[case]]
+say = "Set the lights in the kitchen to 50"
+route = "home"
+action = "set"
+extracted = "the kitchen lights to 50"
+
+[[case]]
+say = "Kitchen lights off"
+route = "home"
+action = "off"
+extracted = "Kitchen lights"
+
+[[case]]
+say = "Lights on"
+route = "home"
+action = "on"
+
+[[case]]
+say = "Shut off the porch light"
+route = "home"
+action = "off"
+extracted = "the porch light"
+
+[[case]]
+say = "Shut the garage door"
+route = "home"
+action = "close"
+
+[[case]]
+say = "Kill the lights"
+route = "home"
+action = "off"
+
+[[case]]
+say = "Kill the build on the server"
+route = "agent"
+
+[[case]]
+say = "Game on"
+route = "agent"
+
+[[case]]
+say = "The lights are off"
+route = "agent"
+
+# A cancel phrase right after the recipient is the message; after a break, or after anything
+# else was said, it cancels.
+[[case]]
+say = "Tell Terri never mind"
+sends = "Never mind"
+route = "imessage"
+extracted = "Never mind"
+
+[[case]]
+say = "Tell Terri to cancel that"
+sends = "Cancel that"
+route = "imessage"
+extracted = "Cancel that"
+
+[[case]]
+say = "Ask Terri if we should abort"
+route = "imessage"
+rewrite = "ask_question"
+extracted = "if we should abort"
+
+[[case]]
+say = "Tell Terri, never mind"
+route = "cancelled"
+
+[[case]]
+say = "Tell Terri I'll be late never mind"
+route = "cancelled"
+
+# Near-miss names: spelled alike AND sounding alike gets a Send prompt; anything else is refused.
+[[case]]
+say = "Tell Jerry I'm on my way"
+route = "imessage"
+recipient = "terri"
+tier = "weak"
+
+[[case]]
+say = "Tell Troy I'm on my way"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Tell Tara hello"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Tell Terri's mom I said hi"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Tell the guy at the door to wait"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Text the gym that I'll be late"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Ask Google what time it is"
+route = "agent"
+
+[[case]]
+say = "Ask around about a plumber"
+route = "agent"
+
+[[case]]
+say = "Ask mom to call me"
+route = "refuse"
+rule = "unknown_recipient"
+
+[[case]]
+say = "Instinct tells me this is a bad idea"
+route = "agent"
+
+[[case]]
+say = "Send a message to Terri saying I'm late"
+sends = "I'm late"
+route = "imessage"
+recipient = "terri"
+extracted = "I'm late"
+
+[[case]]
+say = "Send Terri a text that I'm late"
+sends = "I'm late"
+route = "imessage"
+recipient = "terri"
+extracted = "I'm late"
+
+[[case]]
+say = "Send me the address"
+route = "agent"
+
+[[case]]
+say = "Remember when we went to Paris?"
+route = "agent"
+
+[[case]]
+say = "Schedule a text to Terri for tomorrow"
+route = "refuse"
+rule = "scheduled_send"
+
+[[case]]
+say = "Okay, I'm leaving now"
+route = "scene"
+scene = "leaving"

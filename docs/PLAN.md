@@ -154,6 +154,14 @@ revisit if real use shows a need.
 | 3. Not allowlisted | "tell harry…" | Never sent: "Didn't recognize 'harry', nothing sent." |
 | 3b. *(later)* LLM guess | "tell harry…" | Suggests who you meant from message recency; you confirm |
 
+A near miss (tier 2) must be spelled alike **and** sound alike, and either end the same way ("Jerry",
+"Sherry" for Terri) or be very close ("Instincts"). "Troy" and "Tara" share only T-R with Terri and are
+refused; so is a possessive ("Terri's mom") and, for multi-word names, anything whose last word doesn't
+sound the same ("the guy", "the gym" for "the guys"). A bare name with no verb needs a pause after it
+("Instinct, ..."). "Ask <unknown name> what/about ..." goes to the agent ("ask Google what time it is").
+A cancel phrase directly after the recipient is the message ("tell Terri never mind" sends "Never
+mind"); after a sentence break or anything else, it cancels.
+
 Names match by spelling **and** sound. "Hey X" / "X, …" is direct speech (sent as spoken); only
 "ask X…" is rewritten into a direct question. "Tell X to grab milk" sends "Grab milk".
 

@@ -186,7 +186,7 @@ phrases = ["goodnight", "good night"]
 actions = []   # e.g. [{ device = "living room light", action = "off" }]
 
 [scenes.leaving]
-phrases = ["i'm leaving", "im leaving", "leaving now"]
+phrases = ["i'm leaving", "im leaving", "leaving now", "i'm leaving now"]
 actions = []
 
 # -------------------------------------------------------------------- cancel --

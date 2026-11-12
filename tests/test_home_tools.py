@@ -146,7 +146,7 @@ def test_agent_answers_a_question_about_a_door(cfg, fake_fm):
 
 
 def test_agent_handles_phrasing_the_router_misses(cfg, fake_fm):
-    said = "Kitchen lights off"
+    said = "Could you get the kitchen lights off for me"
     assert route(said, cfg).route == "agent"
     ctx, fake = agent_ctx(cfg, fake_fm, [("home_control", {"action": "off", "target": "kitchen lights"})])
     res = h_agent(route(said, cfg), ctx, "general")

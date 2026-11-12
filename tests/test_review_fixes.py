@@ -267,3 +267,16 @@ def test_scene_that_half_runs_is_partial(cfg, fake_fm):
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   hubitat_factory=lambda c: hub)
     assert h_scene(route("Goodnight", cfg), ctx).state == "partial"
+
+
+def test_open_the_door_asks_which_instead_of_opening_the_garage(cfg, fake_fm):
+    from ringrouter.hubitat import Hubitat
+    cfg.raw["server"]["dry_run"] = False
+    calls = []
+    devs = [{"id": 70, "label": "Garage Door", "room": "Garage", "capabilities": ["GarageDoorControl"]}]
+    hub = Hubitat("x", "1", "t", fetch=lambda p: devs if p == "/devices/all" else calls.append(p) or {})
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
+                  hubitat_factory=lambda c: hub)
+    assert h_home(route("Open the door", cfg), ctx).state == "refused"
+    assert calls == [] and ctx.notifier.sent[-1].title == "Which one?"
+    assert h_home(route("Open the garage door", cfg), ctx).state == "done" and calls == ["/devices/70/open"]
