@@ -25,8 +25,9 @@ class FakeFM:
         self.calls.append(("split", spoken))
         return [s.strip() for s in spoken.replace(" and ", ",").split(",") if s.strip()]
 
-    def extract(self, text, instructions, schema):
+    def extract(self, text, instructions, schema, now=None):
         self.calls.append(("extract", text))
+        self.extract_now = now
         return {"title": "Call the vet", "due": "2026-11-10 17:00:00", "start": "2026-11-10 15:00:00"}
 
 

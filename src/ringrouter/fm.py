@@ -48,9 +48,10 @@ class FM:
         data = json.loads(self.respond(spoken, prompt("shopping_split"), SCHEMAS / "shopping_items.json"))
         return [i.strip() for i in data.get("items", []) if i.strip()]
 
-    def extract(self, text: str, instructions: str, schema: dict) -> dict:
-        """Structured extraction; today's date/time is always included."""
-        now = datetime.now().astimezone()
+    def extract(self, text: str, instructions: str, schema: dict, now: datetime | None = None) -> dict:
+        """Structured extraction; the date/time is always included. `now` is when the words were
+        spoken, if that differs from the present (a recording delivered late)."""
+        now = (now or datetime.now()).astimezone()
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(schema, f)
         try:

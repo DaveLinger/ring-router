@@ -60,10 +60,20 @@ Adapted from [th3walkingdud3/peeble-ring-router](https://github.com/th3walkingdu
 4. De-duplicate by `X-Index-Delivery` in SQLite; repeats get 200 and don't run again.
 5. Parse the multipart body; drop the audio part.
 6. A send that times out is marked `unknown`, gets **422**, and is **never re-sent automatically**.
+   Every mcp-macos / HomeMCPBridge call from the fixed routes has a hard 60-second limit (the server
+   is killed), so a privacy prompt nobody can click doesn't hang the request. (The agent's own MCP
+   session uses Pydantic AI's 180-second tool timeout.)
 7. Global and per-route dry run, plus a simulator that sends signed fake requests.
 
 **What we add:** slow routes (models, agents) store the job, reply `200 accepted` immediately, and
 finish in the background; the result arrives by Pushcut.
+
+**Old recordings:** `recordedAt` says when the words were spoken. A message, home command or scene
+older than `[server] max_recording_age_s` (5 minutes) is held with a **Run / Cancel** notification
+rather than run: holding the button meant "now". Other routes run, and reminder and calendar dates
+are worked out from the spoken time. A `recordedAt` that is missing or not believable (the future,
+over a month old) is ignored. *Assumption until real ring traffic is seen: the field is Unix
+milliseconds and the ring can deliver recordings late.* Test with `ring-router sim --recorded-ago 3600`.
 
 ---
 
@@ -143,6 +153,10 @@ revisit if real use shows a need.
 Names match by spelling **and** sound. "Hey X" / "X, …" is direct speech (sent as spoken); only
 "ask X…" is rewritten into a direct question. "Tell X to grab milk" sends "Grab milk".
 
+**Where it goes:** the recipient's `handle` in the config (recommended), or else the Contacts card
+named in `contact`: exactly one card must have that name, and only its Phone / Email lines are read
+(mobile first). No card, several cards, or no usable number means "Not sent", never a guess.
+
 ---
 
 ## Route catalog
@@ -203,13 +217,23 @@ landed on an agent that couldn't write. One agent with a shared conversation thr
 
 - Tools not in the table are invisible. Each mcp-macos tool takes an `action` argument, so a guard checks
   every call and refuses anything not allowed. In dry run, writes return "DRY RUN: would…".
+- **Write-intent gate:** `update` and `delete` run only when the user's own words (this request or
+  earlier turns of the thread, never tool output or the agent's replies) contain a word that asks for
+  a change: "move", "cancel", "remove", "mark… done" and the like (`WRITE_INTENT` in `agents.py`).
+  A question such as "What's on my calendar Thursday?" therefore can't end in a deletion, whatever an
+  invite or web page says. Deletes are capped at `[agents] max_deletes` (1) per request. Cost: an
+  implied change ("I already called the vet") is refused; say "mark it done", or set
+  `[agents] require_write_intent = false`.
 - **Background noise → `run_command`:** if a transcript like "okay Mark, thanks, see you later… ask
   deepseek what color is the sky" misses every prefix, the agent can hand the buried command back to
   the top of the pipeline, where it gets normal routing, allowlist, tiers, cancels and dry run. Safeguards
   in code: the command must be a **word-for-word excerpt** of the transcript (the agent can trim noise,
-  never add or change words); a command that routes back to the agent is refused; once per request; a
-  rerouted *message* needs a Send/Cancel tap (`[agents] confirm_rerouted_messages`); the rerouted route
-  sends the only notification.
+  never add or change words); an excerpt that follows a negation in the transcript ("don't unlock the
+  front door", "I told her not to open the garage") is refused; a command that routes back to the
+  agent is refused; once per request; a rerouted *message* needs a Send/Cancel tap
+  (`[agents] confirm_rerouted_messages`), and so does a rerouted unlock or garage-open
+  (`[agents] confirm_rerouted_home`; spoken directly, those still just run); the rerouted route sends
+  the only notification.
 - **Follow-ups:** the agent keeps one conversation thread (10-minute window), passed as message history,
   so "Which of those is cheapest?" or "Why isn't the Tesla Model S Plaid on this list?" work naturally.
 - Instructions combine the spoken-transcript preamble, `profile.md`, `prompts.toml` and the current date/time.

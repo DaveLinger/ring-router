@@ -11,6 +11,7 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Callable
 
 from . import md, mcp
@@ -27,6 +28,10 @@ log = logging.getLogger(__name__)
 
 # Slow routes reply "accepted" to the Pebble app right away and finish in the background.
 SLOW_ROUTES = {"llm", "research", "agent", "claude_code"}
+# Routes that act on the world right away. A recording delivered long after it was spoken (the ring
+# was out of range, the phone was offline) asks first instead of running: holding the button meant
+# "now", not "whenever this arrives".
+LATE_CONFIRM_ROUTES = {"imessage", "home", "scene"}
 
 
 @dataclass
@@ -44,6 +49,7 @@ class Context:
     fm: FM
     delivery_id: str = ""
     public_url: str = ""                 # base URL for confirm buttons
+    recorded_at: float | None = None     # Unix time the words were spoken, when the ring reported it
     mcp_call: Callable = field(default=None)
     llm: OpenRouter = field(default=None)
     llm_store: LLMStore = field(default=None)
@@ -77,6 +83,10 @@ class Context:
 
     def dry(self, route: str) -> bool:
         return self.cfg.is_dry_run(route)
+
+    def spoken_at(self) -> datetime | None:
+        """Local time the words were spoken (None if unknown): the "now" for "in 20 minutes"."""
+        return datetime.fromtimestamp(self.recorded_at) if self.recorded_at else None
 
     def trace(self, phase: str, **data) -> None:
         try:
@@ -237,7 +247,11 @@ def send_imessage(payload: dict, ctx: Context, rewrote: bool = False) -> Result:
     if rc.get("chat_id"):
         args["chatId"] = rc["chat_id"]
     else:
-        args["to"] = resolve_handle(rc, ctx)
+        try:
+            args["to"] = resolve_handle(rc, ctx)
+        except Exception as e:      # nothing was sent: the lookup failed, timed out or was ambiguous
+            ctx.notify("Not sent", f"To {display}: {e}")
+            return Result("failed", f"recipient lookup failed, nothing sent: {e}", 422)
     ctx.store.set_state(ctx.delivery_id, "sending")
     try:
         ctx.mcp_call("messages_chat", args)
@@ -252,15 +266,56 @@ def send_imessage(payload: dict, ctx: Context, rewrote: bool = False) -> Result:
 
 
 def resolve_handle(rc: dict, ctx: Context) -> str:
+    """Where to send: the pinned `handle`, else the one Contacts card named `contact`.
+
+    The lookup refuses rather than guesses: exactly one card must match, and only its Phone / Email
+    lines are read (never the card ID or anything else in the search output).
+    """
     if rc.get("handle"):
         return rc["handle"]
-    out = ctx.mcp_call("contacts_people", {"action": "search", "search": rc["contact"]})
-    import re  # noqa: PLC0415
-    phones = re.findall(r"\+?\d[\d\s().-]{7,}\d", out)
-    emails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", out)
-    if not (phones or emails):
-        raise RuntimeError(f"no phone/email found for contact {rc['contact']!r}")
-    return (phones or emails)[0]
+    name = rc["contact"]
+    cards = parse_contacts(ctx.mcp_call("contacts_people", {"action": "search", "search": name}))
+    exact = [c for c in cards if c["name"].casefold() == name.casefold()]
+    cards = exact or cards
+    hint = "set `handle` for this recipient in config.toml"
+    if len(cards) != 1:
+        raise RuntimeError(f"{len(cards) or 'no'} Contacts cards match {name!r}; {hint}")
+    card = cards[0]
+    mobile = [v for v, label in card["phones"] if re.search(r"mobile|iphone|cell", label, re.IGNORECASE)]
+    handles = mobile or [v for v, _ in card["phones"]] or [v for v, _ in card["emails"]]
+    if not handles:
+        raise RuntimeError(f"the Contacts card for {name!r} has no usable phone or email; {hint}")
+    return handles[0]
+
+
+def parse_contacts(out: str) -> list[dict]:
+    """mcp-macos contact search output -> [{"name", "phones": [(value, label)], "emails": [...]}].
+
+    Shape (one block per card):   - **Full Name**
+                                    - ID: 1234ABCD-...:ABPerson
+                                    - Email: a@b.com (home), c@d.com
+                                    - Phone: +1 (555) 010-0199 (mobile), 555-0100 (work)
+    """
+    cards: list[dict] = []
+    for line in out.splitlines():
+        head = re.match(r"\s*-\s+\*\*(.+?)\*\*\s*$", line)
+        if head:
+            cards.append({"name": head.group(1).strip(), "phones": [], "emails": []})
+            continue
+        field_ = re.match(r"\s+-\s+(Phone|Email):\s*(.+)$", line)
+        if not (field_ and cards):
+            continue
+        for item in field_.group(2).split(", "):
+            m = re.match(r"(.*?)(?:\s+\(([^()]*)\))?$", item.strip())
+            value, label = m.group(1).strip(), m.group(2) or ""
+            if label and re.fullmatch(r"[\d\s-]+", label):      # "(555) 010 (0199)": digits, not a label
+                value, label = item.strip(), ""
+            if field_.group(1) == "Phone":
+                if re.fullmatch(r"\+?[\d\s().-]+", value) and 7 <= len(re.sub(r"\D", "", value)) <= 15:
+                    cards[-1]["phones"].append((value, label))
+            elif re.fullmatch(r"[\w.+-]+@[\w-]+(\.[\w-]+)+", value):
+                cards[-1]["emails"].append((value, label))
+    return cards
 
 
 NOTE_SCRIPT = """on run argv
@@ -408,7 +463,7 @@ def h_reminder(r: Route, ctx: Context) -> Result:
     if r.params.get("location_trigger"):
         return h_geo_reminder(r, ctx)
     try:
-        data = ctx.fm.extract(r.body, prompt("reminder_extract"), REMINDER_SCHEMA)
+        data = ctx.fm.extract(r.body, prompt("reminder_extract"), REMINDER_SCHEMA, now=ctx.spoken_at())
     except Exception as e:
         log.warning("fm extract failed: %s", e)
         data = {"title": r.body}
@@ -452,7 +507,7 @@ def default_end(start: str, all_day: bool, minutes: int = 60) -> str:
 def h_calendar(r: Route, ctx: Context) -> Result:
     cal = r.params.get("calendar")
     try:
-        data = ctx.fm.extract(r.body, prompt("calendar_extract"), EVENT_SCHEMA)
+        data = ctx.fm.extract(r.body, prompt("calendar_extract"), EVENT_SCHEMA, now=ctx.spoken_at())
     except Exception as e:
         msg = f"Couldn't work out the event time: {e}"
         ctx.notify("Not done", msg)
@@ -683,6 +738,9 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
         if sub_r.route == "imessage" and ctx.cfg.section("agents").get("confirm_rerouted_messages", True):
             sub_r.params["tier"] = "weak"            # noise around it: ask before texting anyone
             sub_r.params["heard"] = f"{sub_r.params.get('heard', '')} (picked out of background noise)"
+        if sub_r.route == "home" and sub_r.params.get("action") in ctx.cfg.section("agents").get(
+                "confirm_rerouted_home", ["unlock", "open"]):
+            sub_r.params["confirm"] = True           # said directly it just runs; dug out of noise, ask first
         log.info("delivery %s: agent rerouted %r -> %s", ctx.delivery_id[:8], command, sub_r.describe())
         ctx.trace("reroute", command=command, route=sub_r.route, reason=sub_r.reason, params=sub_r.params,
                   extracted=sub_r.body)

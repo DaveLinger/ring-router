@@ -97,16 +97,27 @@ shopping lists, and reading dates out of reminders and events.
 
 - **Allowlist only.** Messages go only to people and chats in your config. Close-but-not-exact names
   ("Sherry" for Terri) need a **Send / Cancel** tap; unknown names are refused.
+- **No guessing at numbers.** A recipient's number is the `handle` in your config, or the one Contacts
+  card with that exact name. No card, or two of them, and nothing is sent.
 - **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt always shows the exact text sent.
 - **Optional confirm-first actions.** List any home actions (e.g. `unlock`, `open`) in
   `[home] confirm_actions` to require a Pushcut tap. Empty by default: the ring only listens while
   you hold the button, so what you say runs.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"…
-- **No double texts.** A send that times out is marked unknown and never retried automatically.
+- **No double texts.** A send that times out is marked unknown and never retried automatically. The
+  fixed routes give each mcp-macos or HomeKit call 60 seconds, so a stuck permission prompt can't hang
+  a command.
+- **Old recordings ask first.** A message or home command that arrives more than 5 minutes after you
+  said it (`[server] max_recording_age_s`) gets a **Run / Cancel** tap instead of running. "Remind me
+  in 20 minutes" counts from when you spoke.
 - **Noise-tolerant, not inventive.** When background talk hides a command, the agent can hand it back to
-  the router, but only as a word-for-word excerpt of what you said, and a rerouted message asks first.
+  the router, but only as a word-for-word excerpt of what you said. "Don't unlock the door" is not
+  handed back, and a rerouted message, unlock or garage-open asks first.
 - **The agent can't text or email.** It gets calendar, reminders, notes, contacts and web search; allowed
   tools *and actions* are enforced in code, not just the prompt.
+- **The agent only changes things you asked to change.** It may update or delete only when your own
+  words call for it ("move", "cancel", "mark it done"…), so nothing it reads in an invite or on a web
+  page can make it. One delete per request (`[agents] max_deletes`).
 - **Dry run by default**, globally and per route, plus `live_recipients` to limit real sends while testing.
 
 </details>

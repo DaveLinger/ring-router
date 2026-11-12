@@ -18,6 +18,7 @@ PHASES = {
     "transcript": ("Transcript", "Exactly what the Pebble app sent"),
     "cleaned": ("Cleaned text", "Whitespace and quotes normalised, leading filler words dropped"),
     "route": ("Route decision", "Cancel check → scene → fixed prefixes → refusals → general agent"),
+    "late_recording": ("Old recording held", "Spoken too long ago to act on without asking; waiting for a Run tap"),
     "message_composed": ("Message composed", "The exact text that will be sent"),
     "on_device_model": ("Apple on-device model", "/usr/bin/fm: input → output"),
     "model_request": ("Sent to model", "OpenRouter request"),

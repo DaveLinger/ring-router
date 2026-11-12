@@ -97,8 +97,9 @@ def cmd_sim(args) -> int:
         h, b = protocol.build_request(None, secret, trigger="test-event", is_test=True)
         print("test event →", *_post(url, h, b))
     for p in phrases:
+        ago = {"recorded_at_ms": int((time.time() - args.recorded_ago) * 1000)} if args.recorded_ago else {}
         h, b = protocol.build_request(p, secret, trigger=args.trigger, include_audio=args.audio,
-                                      bad_signature=args.bad_signature)
+                                      bad_signature=args.bad_signature, **ago)
         code, text = _post(url, h, b)
         print(f"▶ {p}\n  ← {code} {text}")
         if args.replay:
@@ -203,6 +204,8 @@ def main(argv=None) -> int:
     s.add_argument("--audio", action="store_true", help="include a fake audio part")
     s.add_argument("--bad-signature", action="store_true")
     s.add_argument("--replay", action="store_true", help="send each request twice (dedupe check)")
+    s.add_argument("--recorded-ago", type=float, default=0, metavar="SECONDS",
+                   help="pretend the recording was made this long ago (old-recording check)")
     s.add_argument("--test-event", action="store_true"); s.set_defaults(fn=cmd_sim)
     s = sub.add_parser("check-permissions", help="trigger/verify macOS permission prompts")
     s.add_argument("--message-to", help="recipient key for one test iMessage (e.g. dave)")

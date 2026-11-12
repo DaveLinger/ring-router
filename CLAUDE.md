@@ -14,7 +14,10 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 | No confirmation on unlock / garage open by default | Push-to-talk means intent (owner's explicit call). Opt-in via `[home] confirm_actions`. |
 | Messages only to allowlisted recipients; near-miss names need a Send tap | The one built-in safety check is about *who*, not *what*. |
 | The general agent can't text or email anyone | Enforced in code: tool filter plus a per-call action guard in `agents.py`. Not just the prompt. |
-| `run_command` only accepts a word-for-word excerpt of the transcript | The agent may trim background noise, never invent or reword a command. |
+| `run_command` only accepts a word-for-word excerpt of the transcript | The agent may trim background noise, never invent or reword a command. Negated excerpts are refused; a rerouted message, unlock or garage-open needs a tap (directly spoken ones don't). |
+| The agent may `update`/`delete` only when the user's words ask for a change | Text it reads (invites, web pages) must not be able to trigger changes. Costs the odd implied request ("I already called the vet"). `[agents] require_write_intent`, `max_deletes`. |
+| Old recordings (over `[server] max_recording_age_s`) ask before sending or controlling anything | Push-to-talk means intent *at the time*. Assumes `recordedAt` is Unix ms; an unbelievable value is ignored. |
+| Contact lookup refuses unless exactly one card matches | Never guess a number. Pinning `handle` per recipient is preferred. |
 | Hubitat calls go through `/usr/bin/curl`, not urllib | macOS Local Network privacy silently blocks the launchd-run Homebrew Python ("No route to host"). Curl under Ring Router.app gets through. |
 | A Swift launcher, `Ring Router.app`, wraps a Python service | One stable macOS identity for every privacy grant (Local Network, Calendars, Contacts, Automation, HomeKit). Signed with an Apple Development cert so grants survive rebuilds. |
 | Vendored, patched `mcp-macos` and HomeMCPBridge (`vendor/patches/`) | iCloud-only calendars (a Google account is mirrored in by calsync), one HomeKit home, lookup by exact device id, Fan v2 support. |

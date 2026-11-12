@@ -10,6 +10,7 @@ dry_run = true              # global: nothing is sent or changed while true
 dry_run_routes = []         # routes kept in dry run even when dry_run = false
 state_dir = "~/Library/Application Support/ring-router"
 timestamp_window_s = 300
+max_recording_age_s = 300   # a message or home command spoken longer ago than this asks "Run it now?" (0 = off)
 
 [notify]
 provider = "console"        # "console" (log only) or "pushcut"
@@ -29,10 +30,14 @@ command = ["/opt/homebrew/bin/node", "vendor/node_modules/mcp-macos/bin/run.cjs"
 # The allowlist. Nobody else can be messaged.
 # sounds_like: spellings speech-to-text may produce (matched as strong).
 # bare = true allows "Instinct, ..." with no ask/tell verb in front.
+# Where a message goes: `handle` (a phone number or email, recommended: it can't change under you),
+# or else the one Contacts card named in `contact` (its mobile number, else first phone, else
+# email). If no card or more than one card has that name, nothing is sent.
 
 [recipients.terri]
 display = "Terri"
 contact = "Terri Lastname"           # Contacts card name
+# handle = "+15555550100"
 sounds_like = ["terri", "terry", "teri", "tari", "tery", "terrie"]
 
 [recipients.instinct]
@@ -82,6 +87,9 @@ read_messages = false   # let the agent read (never send) Messages; needs Full D
 web_search_model = "deepseek/deepseek-v4.1-flash"   # backs the agents' web_search tool
 web_results = 5
 confirm_rerouted_messages = true   # a message the agent picks out of background noise needs a Send tap
+confirm_rerouted_home = ["unlock", "open"]   # so do these home actions (said directly, they just run)
+require_write_intent = true   # the agent may update/delete only if your words asked for a change
+max_deletes = 1               # deletes the agent may make per request
 
 [research]
 web_results = 8

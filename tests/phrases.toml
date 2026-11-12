@@ -477,3 +477,13 @@ extracted = "Move my dentist appointment to next week"
 say = "Um, okay, find a good time for me and Terri to get dinner this week"
 route = "agent"
 extracted = "find a good time for me and Terri to get dinner this week"
+
+# A negated command is not a command: it goes to the agent, which may not hand it back to the
+# router (run_command refuses an excerpt that follows "don't" / "not to" / "never").
+[[case]]
+say = "Don't unlock the front door"
+route = "agent"
+
+[[case]]
+say = "Do not open the garage"
+route = "agent"

@@ -13,6 +13,7 @@ import hmac
 import urllib.parse
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -28,6 +29,30 @@ from .store import Store
 
 log = logging.getLogger(__name__)
 MAX_BODY = 20 * 1024 * 1024
+
+
+def recorded_time(value, now: float | None = None) -> float | None:
+    """The webhook's recordedAt (Unix ms) as Unix seconds; None when missing or implausible.
+
+    The field comes from the reference project and hasn't been seen in real ring traffic yet, so
+    anything odd (not a number, the future, over a month old) is ignored rather than trusted.
+    """
+    try:
+        t = float(value)
+    except (TypeError, ValueError):
+        return None
+    t = t / 1000 if t > 1e11 else t          # ms, or seconds if the app turns out to send those
+    now = time.time() if now is None else now
+    if not (now - 30 * 86400 <= t <= now + 300):
+        return None
+    return min(t, now)
+
+
+def _ago(seconds: float) -> str:
+    m = round(seconds / 60)
+    if m < 90:
+        return f"{m} min"
+    return f"{round(m / 60)} h" if m < 48 * 60 else f"{round(m / 1440)} days"
 
 
 class App:
@@ -50,15 +75,21 @@ class App:
         for d in self.store.recover_interrupted():
             log.error("delivery %s was mid-send at shutdown; marked unknown (not resent)", d[:8])
 
-    def ctx(self, delivery_id: str) -> Context:
+    def ctx(self, delivery_id: str, recorded_at: float | None = None) -> Context:
         return Context(cfg=self.cfg, notifier=self.notifier, store=self.store, fm=self.fm,
-                       delivery_id=delivery_id, public_url=self.public_url, mcp_call=self.mcp_call,
+                       delivery_id=delivery_id, public_url=self.public_url, recorded_at=recorded_at,
+                       mcp_call=self.mcp_call,
                        llm=self.llm, llm_store=self.llm_store, notes_writer=self.notes_writer,
                        agent_runner=self.agent_runner)
 
-    def process(self, delivery_id: str, transcript: str) -> tuple[int, str]:
-        """Route + handle one authenticated, de-duplicated transcript."""
-        ctx = self.ctx(delivery_id)
+    def process(self, delivery_id: str, transcript: str, recorded_at: float | None = None,
+                allow_late: bool = False) -> tuple[int, str]:
+        """Route + handle one authenticated, de-duplicated transcript.
+
+        recorded_at: when it was spoken (Unix s), if known. allow_late: the owner tapped "Run" on
+        an old recording, so don't hold it again.
+        """
+        ctx = self.ctx(delivery_id, recorded_at)
         ctx.trace("transcript", text=transcript)
         ctx.trace("cleaned", text=clean(transcript))
         r = route(transcript, self.cfg)
@@ -66,6 +97,10 @@ class App:
                   slow=r.route in handlers.SLOW_ROUTES, dry_run=self.cfg.is_dry_run(r.route))
         log.info("delivery %s: %s", delivery_id[:8], r.describe())
         self.store.set_state(delivery_id, "received", transcript=r.transcript, route=r.route)
+        age = time.time() - recorded_at if recorded_at else 0
+        max_age = int(self.cfg.server.get("max_recording_age_s", 300))
+        if r.route in handlers.LATE_CONFIRM_ROUTES and not allow_late and 0 < max_age < age:
+            return self._hold_late(ctx, r, transcript, recorded_at, age)
         if r.route in handlers.SLOW_ROUTES and self.pool:
             self.store.set_state(delivery_id, "accepted", summary=r.reason)
             ctx.trace("response", http_status=200, body=f"accepted: {r.route}", note="slow route; finishing in background")
@@ -77,6 +112,21 @@ class App:
         ctx.trace("response", http_status=res.http_status, body=f"{res.state}: [{r.route}] {res.summary}")
         log.info("delivery %s: %s: %s", delivery_id[:8], res.state, res.summary)
         return res.http_status, f"{res.state}: [{r.route}] {res.summary}"
+
+    def _hold_late(self, ctx: Context, r, transcript: str, recorded_at: float, age: float) -> tuple[int, str]:
+        """An old recording that would act right away: ask before running it."""
+        pid = self.store.add_pending(ctx.delivery_id, "late", {
+            "delivery_id": ctx.delivery_id, "transcript": transcript, "recorded_at": recorded_at},
+            self.cfg.section("notify").get("confirm_ttl_s", 300))
+        summary = f"recorded {_ago(age)} ago, held for confirmation {pid}"
+        ctx.trace("late_recording", age_s=round(age), route=r.route, confirmation=pid)
+        ctx.notify("Old recording", f"Recorded {_ago(age)} ago: \u201c{r.transcript}\u201d. Run it now?",
+                   [handlers.Button("Run", f"{self.public_url}/confirm/{pid}/yes", background=True),
+                    handlers.Button("Cancel", f"{self.public_url}/confirm/{pid}/no", background=True)])
+        self.store.set_state(ctx.delivery_id, "needs_confirm", summary=summary)
+        ctx.trace("response", http_status=200, body=f"needs_confirm: [{r.route}] {summary}")
+        log.info("delivery %s: %s", ctx.delivery_id[:8], summary)
+        return 200, f"needs_confirm: [{r.route}] {summary}"
 
     def _background(self, r, ctx: Context) -> None:
         res = handlers.run(r, ctx)
@@ -110,6 +160,9 @@ class App:
         if not claimed:
             return 410, "expired or already handled"
         kind, payload = claimed
+        if kind == "late":      # an old recording the owner chose to run: back through the pipeline
+            return self.process(payload["delivery_id"], payload["transcript"], payload.get("recorded_at"),
+                                allow_late=True)
         res: Result = handlers.run_confirmed(kind, payload, self.ctx(f"confirm-{pid}"))
         return res.http_status, f"{res.state}: {res.summary}"
 
@@ -228,7 +281,7 @@ def make_handler(app: App):
             if not transcript:
                 app.store.set_state(did, "discarded", summary="no transcription part")
                 return self.reply(200, "discarded: no transcription (set payload mode to include it)")
-            code, text = app.process(did, transcript)
+            code, text = app.process(did, transcript, recorded_time(fields.get("recordedAt")))
             return self.reply(code, text)
 
         def _confirm(self, p: str):
