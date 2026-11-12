@@ -13,7 +13,7 @@ import time
 import unicodedata
 
 from . import mcp
-from .hubitat import Catalog, Device
+from .hubitat import Catalog, Device, excluded
 
 TYPE_CAPS = {
     "light": {"Switch", "SwitchLevel"},
@@ -38,10 +38,12 @@ def _norm(s: str) -> str:
 
 class HomeKit:
     def __init__(self, command: list[str], *, homes: list[str] | None = None, exclude_rooms: list[str] | None = None,
-                 skip_manufacturers: list[str] | None = None, call=None, cache_s: int = 300):
+                 skip_manufacturers: list[str] | None = None, exclude: list[str] | None = None, call=None,
+                 cache_s: int = 300):
         self.bridge_cmd = command
         self.env = dict(os.environ, HOMEMCP_HOMES=",".join(homes or ["primary"]))
         self.exclude_rooms = {_norm(r) for r in (exclude_rooms or [])}
+        self.exclude = {e.lower() for e in (exclude or [])}
         self.skip_manufacturers = [_norm(m) for m in (["hubitat"] if skip_manufacturers is None else skip_manufacturers)]
         self._call = call or (lambda tool, args: mcp.call_tool(self.bridge_cmd, tool, args, timeout_s=60, env=self.env))
         self.cache_s, self._cache, self._cache_t = cache_s, None, 0.0
@@ -54,7 +56,7 @@ class HomeKit:
                 caps = TYPE_CAPS.get(d.get("type", ""))
                 if not caps or d.get("source", "HomeKit") != "HomeKit":
                     continue
-                if _norm(d.get("room") or "") in self.exclude_rooms:
+                if _norm(d.get("room") or "") in self.exclude_rooms or excluded(d.get("name", ""), self.exclude):
                     continue
                 if any(m in _norm(d.get("manufacturer") or "") for m in self.skip_manufacturers):
                     continue      # bridged in from Hubitat: Hubitat controls it directly
@@ -62,6 +64,18 @@ class HomeKit:
                                   attrs={"type": d.get("type")}, backend="homekit"))
             self._cache, self._cache_t = out, time.time()
         return self._cache
+
+    def state(self, device: Device) -> dict:
+        res = json.loads(self._call("get_device_state", {"name": device.id}))
+        if res.get("success") is False or (res.get("error") and "isOn" not in res):
+            raise RuntimeError(res.get("error") or f"HomeKit gave no state for {device.label}")
+        out: dict = {}
+        for src, dst in (("isOn", "on"), ("isLocked", "locked"), ("doorState", "door"), ("reachable", "reachable")):
+            if res.get(src) is not None:
+                out[dst] = res[src]
+        if isinstance(res.get("brightness"), (int, float)):
+            out["level"] = int(res["brightness"])
+        return out
 
     def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
         is_fan = device.attrs.get("type") == "fan"
@@ -86,7 +100,6 @@ class HomeKit:
             res = {"raw": out}
         if res.get("success") is False or res.get("error"):
             raise RuntimeError(res.get("error") or f"HomeKit refused {action} on {device.label}")
-        self._cache = None
         return res
 
 
@@ -112,3 +125,7 @@ class Home(Catalog):
     def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
         backend = self.homekit if device.backend == "homekit" else self.hubitat
         return backend.command(device, cmd, value)
+
+    def state(self, device: Device) -> dict:
+        backend = self.homekit if device.backend == "homekit" else self.hubitat
+        return backend.state(device)

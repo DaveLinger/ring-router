@@ -18,7 +18,11 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class Result:
-    state: str          # done | dry_run | cancelled | refused | discarded | needs_confirm | failed | unknown
+    # done | dry_run | cancelled | refused | discarded | needs_confirm, or one of three ways to not finish:
+    #   failed   nothing happened (the only state a retry of the same delivery may run again)
+    #   partial  some of it happened
+    #   unknown  no answer in time: it may or may not have happened
+    state: str
     summary: str
     http_status: int = 200
 

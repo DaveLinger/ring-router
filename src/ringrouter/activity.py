@@ -18,6 +18,12 @@ PHASES = {
     "transcript": ("Transcript", "Exactly what the Pebble app sent"),
     "cleaned": ("Cleaned text", "Whitespace and quotes normalised, leading filler words dropped"),
     "route": ("Route decision", "Cancel check → scene → fixed prefixes → refusals → general agent"),
+    "retry": ("Retry", "The same delivery arrived again after failing with nothing done, so it was run again"),
+    "confirmed": ("Confirmed", "The button was tapped; the held action ran"),
+    "when": ("Date and time", "What was said, what the on-device model answered, and what the code settled on"),
+    "agent_home": ("Agent device action", "The agent asked for a device change; it ran like a spoken home command"),
+    "read_back": ("Read-back", "The lock or door was asked what state it ended up in"),
+    "home_status": ("Device state", "What the agent was told when it asked about devices"),
     "late_recording": ("Old recording held", "Spoken too long ago to act on without asking; waiting for a Run tap"),
     "message_composed": ("Message composed", "The exact text that will be sent"),
     "on_device_model": ("Apple on-device model", "/usr/bin/fm: input → output"),
@@ -32,7 +38,7 @@ PHASES = {
     "response": ("Response to the Pebble app", "HTTP status the app sees in Recent runs"),
 }
 
-STATE_COLORS = {"done": "ok", "sent": "ok", "dry_run": "dry", "accepted": "dry", "needs_confirm": "warn",
+STATE_COLORS = {"partial": "warn", "done": "ok", "sent": "ok", "dry_run": "dry", "accepted": "dry", "needs_confirm": "warn",
                 "cancelled": "muted", "refused": "warn", "discarded": "muted", "failed": "bad", "unknown": "bad"}
 
 CSS = """

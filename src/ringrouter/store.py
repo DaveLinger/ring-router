@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS pending (
 );
 """
 # Delivery states: received, discarded, cancelled, refused, dry_run, sending, sent,
-# accepted (slow job queued), done, needs_confirm, failed, unknown
+# accepted (slow job queued), done, needs_confirm, failed (nothing happened), partial, unknown
 
 
 class Store:
@@ -109,11 +109,15 @@ class Store:
             self.conn.execute("DELETE FROM deliveries WHERE updated < ?", (cutoff,))
             self.conn.execute("DELETE FROM pending WHERE created < ?", (cutoff,))
 
-    def recover_interrupted(self) -> list[str]:
-        """A send in progress at shutdown has unknown status; never resend it."""
+    def recover_interrupted(self) -> list[tuple[str, str, str | None, float]]:
+        """Anything still in flight at start-up was cut off by the shutdown: a send in progress, a
+        command being handled, a queued slow job. Its outcome is unknown, so it is marked that way
+        and never run again. Returns (delivery_id, state it was in, transcript, last update)."""
         with self.lock:
-            rows = [r[0] for r in self.conn.execute("SELECT delivery_id FROM deliveries WHERE state='sending'")]
-            self.conn.execute("UPDATE deliveries SET state='unknown' WHERE state='sending'")
+            rows = self.conn.execute("SELECT delivery_id, state, transcript, updated FROM deliveries"
+                                     " WHERE state IN ('sending', 'received', 'accepted')").fetchall()
+            self.conn.execute("UPDATE deliveries SET state='unknown', summary=COALESCE(summary || '; ', '')"
+                              " || 'interrupted by a restart' WHERE state IN ('sending', 'received', 'accepted')")
         return rows
 
     # pending confirmations ---------------------------------------------------
@@ -124,6 +128,12 @@ class Store:
             self.conn.execute("INSERT INTO pending VALUES(?,?,?,?,?,?,?)",
                               (pid, delivery_id, kind, json.dumps(payload), "waiting", now, now + ttl_s))
         return pid
+
+    def pending_delivery(self, pid: str) -> str | None:
+        """The delivery a confirmation belongs to."""
+        with self.lock:
+            row = self.conn.execute("SELECT delivery_id FROM pending WHERE id=?", (pid,)).fetchone()
+        return row[0] if row and row[0] else None
 
     def take_pending(self, pid: str) -> tuple[str, dict] | None:
         """Atomically claim a waiting, unexpired confirmation."""

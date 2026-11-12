@@ -10,19 +10,19 @@ import html
 import re
 
 _LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
-_URL = re.compile(r"(?<![\"'>=])(https?://[^\s<)]+)")
+_URL = re.compile(r"https?://(?:(?!&quot;|&#x27;|&lt;|&gt;)[^\s<)])+")     # runs on escaped text: stop at a quote
 
 
 def inline(text: str) -> str:
-    t = html.escape(text, quote=False)
+    t = html.escape(text, quote=True)     # quotes too: a URL ends up inside href="...", and must stay there
     links: list[str] = []
 
-    def keep(m):
-        links.append(f'<a href="{html.escape(m.group(2))}">{m.group(1)}</a>')
+    def keep(url: str, label: str) -> str:      # set aside, so the formatting below can't reach into a link
+        links.append(f'<a href="{url}">{label}</a>')
         return f"\x00{len(links) - 1}\x00"
 
-    t = _LINK.sub(keep, t)
-    t = _URL.sub(lambda m: f'<a href="{m.group(1)}">{m.group(1)}</a>', t)
+    t = _LINK.sub(lambda m: keep(m.group(2), m.group(1)), t)
+    t = _URL.sub(lambda m: keep(m.group(0), m.group(0)), t)
     t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
     t = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", t)
     t = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<i>\1</i>", t)

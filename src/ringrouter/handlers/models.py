@@ -111,10 +111,39 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
         res = run(sub_r, ctx)
         return sub_r.route, f"{res.state}: {res.summary}"
 
+    class HomeTools:
+        """What the agent may do with home devices: the same matcher, dry run and confirmations as
+        a spoken command, with unlock and open always held for a tap."""
+
+        @staticmethod
+        def status(target: str) -> str:
+            from . import home_status  # noqa: PLC0415
+            return home_status(ctx, target)
+
+        @staticmethod
+        def control(action: str, target: str, value: str = "") -> tuple[str, str]:
+            from . import run_home  # noqa: PLC0415
+            ask = action in ctx.cfg.section("agents").get("confirm_rerouted_home", ["unlock", "open"]) \
+                or action in ctx.cfg.section("home").get("confirm_actions", [])
+            spoken = target + (f" to {value}" if str(value).strip() else "")
+            ctx.trace("agent_home", action=action, target=target, value=value, confirm=ask)
+            res = run_home(ctx, action, spoken, confirm=ask)
+            return res.state, res.summary
+
+    if ctx.cfg.section("agents").get("home_tools", True) and ctx.hubitat_factory(ctx) is not None:
+        rerouter.home = HomeTools       # rides along with the rerouter, so agent runners keep their signature
+
     try:
         text, spec = ctx.agent_runner(kind, r.body, ctx.cfg, history, rerouter)
     except Exception as e:
         log.exception("%s agent failed", kind)
+        ran = [c for c in getattr(getattr(e, "agent_spec", None), "calls", [])
+               if c["action"] not in ("read", "search", "reroute") and c["result"] == "ok"]
+        if ran:                 # it changed something and then failed: say what, and never run it again as a whole
+            did = ", ".join(f"{c['tool']} {c['action']}" for c in ran)
+            ctx.trace("agent", kind=kind, tool_calls=list(e.agent_spec.calls), error=str(e))
+            ctx.notify("Not finished", f"{e}. Already done: {did}. Heard: \u201c{r.transcript}\u201d")
+            return Result("partial", f"{kind} agent error after {did}: {e}")
         ctx.notify("Not done", f"{e}. Heard: \u201c{r.transcript}\u201d")
         return Result("failed", f"{kind} agent error: {e}")
     ctx.llm_store.remember(AGENT_THREAD, r.body, text)
@@ -124,6 +153,13 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
     if getattr(spec, "rerouted", None):   # the rerouted route already notified the user
         rr = spec.rerouted[0]
         return Result("done", f"agent rerouted {rr['command']!r} -> {rr['route']}: {rr['summary']}")
+    if getattr(spec, "home", None):       # so did each device action
+        states = [h["state"] for h in spec.home]
+        worst = next((s for s in ("unknown", "partial", "failed", "refused", "needs_confirm", "dry_run") if s in states),
+                     "done")
+        if worst == "failed" and len(set(states)) > 1:
+            worst = "partial"
+        return Result(worst, "agent home: " + "; ".join(f"{h['action']} {h['target']} -> {h['summary']}" for h in spec.home))
     calls = ", ".join(f"{c['tool']}.{c['action']}={c['result']}" for c in spec.calls) or "no tools"
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
     dry = any(c["result"] == "dry_run" for c in spec.calls)

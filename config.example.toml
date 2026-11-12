@@ -88,10 +88,13 @@ read_messages = false   # let the agent read (never send) Messages; needs Full D
 web_search_model = "deepseek/deepseek-v4.1-flash"   # backs the agents' web_search tool
 web_results = 5
 confirm_rerouted_messages = true   # a message the agent picks out of background noise needs a Send tap
-confirm_rerouted_home = ["unlock", "open"]   # so do these home actions (said directly, they just run)
+confirm_rerouted_home = ["unlock", "open"]   # so do these home actions when they come through the agent
+                                             # (said as a plain command, they just run)
 require_write_intent = true   # the agent may update/delete only if your words asked for a change
 max_deletes = 1               # deletes the agent may make per request
 max_requests = 12             # model calls one request may use before the agent is stopped
+home_tools = true             # the agent may read device state and control devices you ask it to
+max_home_actions = 5          # device actions the agent may take per request
 
 [research]
 web_results = 8
@@ -149,7 +152,7 @@ remember_folder = "Remember"
 enabled = false             # optional module; HomeKit handles everything when off
 host = "192.168.1.10"          # hub's local IP
 app_id = "CHANGE-ME"           # Maker API app ID; token is RING_ROUTER_HUBITAT_TOKEN in .env
-exclude = []                  # device labels never to control (detectors/alarms are always excluded)
+exclude = []                  # same as [home] exclude (kept for older configs)
 # spoken nickname -> exact Hubitat device label (for names the matcher can't guess)
 aliases = { "back door" = "Back Door Lock" }
 prefer = ["ceiling fan"]       # tie-breaker when a name matches several devices
@@ -165,6 +168,15 @@ exclude_rooms = []      # rooms never controlled (e.g. cameras for another house
 # Actions that need a Pushcut Send/Cancel tap before they run. Empty = everything runs as
 # spoken (the ring only listens while you hold the button). e.g. ["unlock", "open"]
 confirm_actions = []
+# Device names never to control, on either backend. Anything named a detector, alarm or siren is
+# always left alone, and "turn off everything" skips outlets and plugs without listing them here.
+exclude = []
+# Read-back: after lock / unlock / open / close, ask the device what state it ended up in and say
+# so ("Front Door locked (confirmed)", or "was told to lock but reports unlocked"). Off by default:
+# it makes the command wait for the device (a garage door takes ~15 s) before it answers.
+read_back = false
+read_back_timeout_s = 20      # how long to wait for the device to get there
+read_back_every_s = 2         # how often to look while waiting
 
 # -------------------------------------------------------------------- scenes --
 # Exact phrase only: the whole transcript must equal one of the phrases.

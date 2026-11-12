@@ -6,7 +6,9 @@ import json
 import logging
 import re
 import subprocess
+from datetime import datetime
 
+from .. import when
 from ..config import PROJECT_DIR
 from ..prompts import prompt
 from ..router import Route
@@ -87,10 +89,27 @@ def h_list_add(r: Route, ctx: Context) -> Result:
     if ctx.dry("list_add"):
         ctx.notify("Dry run", f"Would add to {rl}: {', '.join(items)}")
         return Result("dry_run", f"DRY RUN: would add to {rl!r}: {items}")
-    for it in items:
-        ctx.mcp_call("reminders_tasks", {"action": "create", "title": it, "targetList": rl})
-    ctx.notify(f"Added to {rl}", ", ".join(items))
-    return Result("done", f"added {items} to {rl!r}")
+    added, failed, skipped = [], [], []
+    for n, it in enumerate(items):
+        try:
+            ctx.mcp_call("reminders_tasks", {"action": "create", "title": it, "targetList": rl})
+            added.append(it)
+        except TimeoutError as e:       # Reminders isn't answering: don't wait a minute per item
+            failed.append(f"{it} (no reply; it may have been added)")
+            skipped = items[n + 1:]
+            log.warning("list add timed out on %r: %s", it, e)
+            break
+        except Exception as e:
+            failed.append(f"{it} ({e})")
+    if not failed:
+        ctx.notify(f"Added to {rl}", ", ".join(items))
+        return Result("done", f"added {items} to {rl!r}")
+    parts = ([f"Added: {', '.join(added)}."] if added else []) + [f"Not added: {'; '.join(failed)}."] \
+        + ([f"Not tried: {', '.join(skipped)}."] if skipped else [])
+    ctx.notify(f"{rl}: partly added" if added else f"{rl}: not added", " ".join(parts))
+    # "failed" means nothing happened (safe to retry); anything else must not be run again as a whole
+    state = "failed" if not added and not skipped else "partial" if not skipped else "unknown"
+    return Result(state, f"list {rl!r}: " + " ".join(parts), 422)
 
 
 REMINDER_SCHEMA = {"title": "Reminder", "type": "object", "additionalProperties": False,
@@ -110,8 +129,12 @@ end tell"""
 
 GEO_PATTERNS = [  # (regex on the reminder text, place, proximity)
     (r"\bwhen i (?:get|arrive|come|am|'m)\s+(?:back\s+)?home\b|\bwhen i get back\b|\bwhen i arrive\b", "home", "enter"),
-    (r"\bwhen i (?:leave|head out|walk out)(?:\s+(?:the\s+)?(?:home|house))?\b", "home", "leave"),
+    (r"\bwhen i (?:leave|head out|walk out)(?:\s+(?:the\s+|my\s+)?(?:home|house))?\b", "home", "leave"),
 ]
+# What follows the trigger when it is about somewhere else: "when I leave work", "when I arrive at
+# the office", "when I get back from vacation". Home is the only place there is a geofence for.
+ELSEWHERE = (r"\s+(?:from\b|at\b|in\b|here\b|there\b|work\b|school\b|town\b|church\b|campus\b"
+             r"|to\s+(?:the|my|a|an|work|school|town|church|campus)\b|(?:the|my|a|an)\s+\w)")
 
 
 def my_card_address() -> str:
@@ -131,7 +154,10 @@ def parse_geo(body: str) -> tuple[str, str, str] | None:
     for pat, place, prox in GEO_PATTERNS:
         m = re.search(pat, body, re.IGNORECASE)
         if m:
-            title = (body[:m.start()] + " " + body[m.end():]).strip(" ,.")
+            said_home = re.search(r"\b(home|house)$", m.group(0), re.IGNORECASE)
+            if not said_home and re.match(ELSEWHERE, body[m.end():], re.IGNORECASE):
+                return None
+            title = " ".join((body[:m.start()] + " " + body[m.end():]).split()).strip(" ,.")
             title = re.sub(r"^(?:to|that|about)\s+", "", title, flags=re.IGNORECASE).strip()
             return capitalize_first(title), place, prox
     return None
@@ -171,25 +197,48 @@ def h_geo_reminder(r: Route, ctx: Context) -> Result:
     return Result("done", f"geofence reminder {title!r} ({prox} home, list {out.get('list')!r})")
 
 
+def _title(model_title, body: str) -> str:
+    """The model's title, tidied ("to buy stamps" -> "Buy stamps"); the spoken words if it gave none."""
+    t = (model_title or "").strip().strip('"') or body.strip()
+    return capitalize_first(re.sub(r"^(?:to|that)\s+", "", t, flags=re.IGNORECASE))
+
+
+def _when_text(w: when.When, now: datetime, end: datetime | None = None) -> str:
+    """'Tue Nov 17, 3:00 PM' (+ ' to 5:00 PM') (+ ' (check the date)')."""
+    out = when.human(w.start, all_day=w.all_day, now=now)
+    if end and not w.all_day:
+        out += " to " + (end.strftime("%-I:%M %p") if end.date() == w.start.date() else when.human(end, now=now))
+    return out + (f" ({'; '.join(w.notes)})" if w.notes else "")
+
+
 def h_reminder(r: Route, ctx: Context) -> Result:
     if r.params.get("location_trigger"):
         return h_geo_reminder(r, ctx)
+    now = ctx.spoken_at() or datetime.now()
     try:
-        data = ctx.fm.extract(r.body, prompt("reminder_extract"), REMINDER_SCHEMA, now=ctx.spoken_at())
-    except Exception as e:
+        data = ctx.fm.extract(r.body, prompt("reminder_extract"), REMINDER_SCHEMA, now=now)
+    except Exception as e:      # the title falls back to the spoken words; the time is worked out in code
         log.warning("fm extract failed: %s", e)
-        data = {"title": r.body}
-    title, due = data.get("title") or r.body, (data.get("due") or "").strip()
-    when = f" due {due}" if due else ""
+        data = {}
+    title = _title(data.get("title"), r.body)
+    # The model supplies the title; the due time is settled in code (the model's date is only a fallback).
+    w = when.settle(r.body, now, model_start=data.get("due") or "")
+    ctx.trace("when", said=r.body, model=data.get("due") or "", settled=w.stamp() if w.start else "",
+              all_day=w.all_day, notes=w.notes)
+    if w.start:
+        shown, summary = f"{title}: {_when_text(w, now)}", f"reminder {title!r} due {w.stamp()}"
+    else:                       # nothing said about when, or said in a way nothing could read
+        shown = title + (f" (no time set: {w.notes[0]})" if w.notes else "")
+        summary = f"reminder {title!r}" + (f" with no due time ({w.notes[0]})" if w.notes else "")
     if ctx.dry("reminder"):
-        ctx.notify("Dry run", f"Would create reminder “{title}”{when}")
-        return Result("dry_run", f"DRY RUN: would create reminder {title!r}{when}")
+        ctx.notify("Dry run", f"Would create reminder “{shown}”")
+        return Result("dry_run", f"DRY RUN: would create {summary}")
     args = {"action": "create", "title": title}
-    if due:
-        args["dueDate"] = due
+    if w.start:
+        args["dueDate"] = w.stamp()
     ctx.mcp_call("reminders_tasks", args)
-    ctx.notify("Reminder set", f"{title}{when}")
-    return Result("done", f"reminder {title!r}{when}")
+    ctx.notify("Reminder set" if w.start or not w.notes else "Reminder set, no time", shown)
+    return Result("done", summary)
 
 
 EVENT_SCHEMA = {"title": "Event", "type": "object", "additionalProperties": False,
@@ -218,24 +267,31 @@ def default_end(start: str, all_day: bool, minutes: int = 60) -> str:
 
 def h_calendar(r: Route, ctx: Context) -> Result:
     cal = r.params.get("calendar")
+    now = ctx.spoken_at() or datetime.now()
     try:
-        data = ctx.fm.extract(r.body, prompt("calendar_extract"), EVENT_SCHEMA, now=ctx.spoken_at())
+        data = ctx.fm.extract(r.body, prompt("calendar_extract"), EVENT_SCHEMA, now=now)
     except Exception as e:
-        msg = f"Couldn't work out the event time: {e}"
+        log.warning("fm extract failed: %s", e)
+        data = {}
+    title = _title(data.get("title"), r.body)
+    w = when.settle(r.body, now, model_start=data.get("start") or "", model_end=data.get("end") or "", event=True)
+    ctx.trace("when", said=r.body, model=data.get("start") or "", settled=w.stamp() if w.start else "",
+              end=w.stamp(w.end) if w.end else "", all_day=w.all_day, notes=w.notes)
+    if not w.start:
+        msg = f"Couldn't work out when “{r.body}” is. Nothing added."
         ctx.notify("Not done", msg)
         return Result("failed", msg)
-    if not (data.get("end") or "").strip():   # mcp-macos requires an end time
-        data["end"] = default_end(data.get("start", ""), bool(data.get("all_day")),
-                                  int(ctx.cfg.section("calendars").get("default_minutes", 60)))
-    desc = f"“{data.get('title')}” {data.get('start')}" + (f" to {data['end']}" if data.get("end") else "")
+    start = w.stamp()
+    end = w.stamp(w.end) if w.end else default_end(start, w.all_day,       # mcp-macos requires an end
+                                                   int(ctx.cfg.section("calendars").get("default_minutes", 60)))
+    shown = f"“{title}” {_when_text(w, now, w.end)}"
+    desc = f"{title!r} {start} to {end}" + (" (all day)" if w.all_day else "")
     if ctx.dry("calendar") or not cal or cal == "CHANGE-ME":
-        ctx.notify("Dry run", f"Would add {desc} to {cal}")
+        ctx.notify("Dry run", f"Would add {shown} to {cal}")
         return Result("dry_run", f"DRY RUN: would add {desc} to calendar {cal!r}")
-    args = {"action": "create", "title": data["title"], "startDate": data["start"], "targetCalendar": cal}
-    if data.get("end"):
-        args["endDate"] = data["end"]
-    if data.get("all_day"):
+    args = {"action": "create", "title": title, "startDate": start, "endDate": end, "targetCalendar": cal}
+    if w.all_day:
         args["isAllDay"] = True
     ctx.mcp_call("calendar_events", args)
-    ctx.notify("Event added", f"{desc} ({cal})")
+    ctx.notify("Event added", f"{shown} ({cal})")
     return Result("done", f"event {desc} on {cal!r}")

@@ -169,6 +169,17 @@ def test_runaway_agent_is_reported_not_silent(cfg, fake_fm):
     assert res.state == "failed" and ctx.notifier.sent[-1].title == "Not done"
 
 
+def test_agent_that_fails_after_changing_something_is_partial(cfg, fake_fm):
+    """So the same delivery is never run again, and the owner is told what already happened."""
+    cfg.raw["server"]["dry_run"] = False
+    cfg.raw.setdefault("agents", {})["max_requests"] = 3
+    ctx, _ = reroute_ctx(cfg, fake_fm, [("reminders_tasks", {"action": "create", "title": "Bring forms"})]
+                         + [("calendar_events", {"action": "read"})] * 10)
+    res = h_agent(route("Put bring forms on my reminders and check my week", cfg), ctx, "general")
+    n = ctx.notifier.sent[-1]
+    assert res.state == "partial" and n.title == "Not finished" and "reminders_tasks create" in n.text
+
+
 def test_agent_cost_and_usage_reach_the_activity_page(cfg, fake_fm, monkeypatch):
     """The web searches an agent makes are paid calls too; their cost shows up with the delivery."""
     from ringrouter.handlers import Context

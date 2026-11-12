@@ -93,12 +93,19 @@ def test_rewrite_failure_sends_what_was_said(live_app, mac, fake_fm):
 
 # ----------------------------------------------------------- Apple apps ----
 
-def test_hung_reminders_call_fails_the_command_and_says_so(live_app, mac):
+def test_hung_reminders_call_is_unknown_not_failed(live_app, mac):
+    """No answer isn't the same as no: the reminder may exist, so this must never be run again."""
     mac.fail["reminders_tasks"] = TimeoutError("reminders_tasks: no reply within 60s")
     code, text = live_app.process("d1", "Remind me at 5 to call the vet")
     n = live_app.notifier.sent[-1]
-    assert code == 422 and live_app.store.get_state("d1") == "failed"
-    assert n.title == "Error" and "no reply within 60s" in n.text and "Remind me at 5" in n.text
+    assert code == 422 and live_app.store.get_state("d1") == "unknown"
+    assert n.title == "Status unknown" and "no reply within 60s" in n.text and "Remind me at 5" in n.text
+
+
+def test_backend_error_is_failed(live_app, mac):
+    mac.fail["reminders_tasks"] = MCPError("Reminders got an error: not authorized")
+    code, text = live_app.process("d1", "Remind me at 5 to call the vet")
+    assert code == 422 and live_app.store.get_state("d1") == "failed" and live_app.notifier.sent[-1].title == "Error"
 
 
 def test_item_split_failure_adds_the_request_as_one_item(live_app, mac, fake_fm):
@@ -115,7 +122,8 @@ def test_title_failure_uses_the_first_words(live_app, mac, fake_fm):
 
 def test_calendar_without_a_usable_date_adds_nothing(live_app, mac, fake_fm):
     fake_fm.extract = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fm down"))
-    code, text = live_app.process("d1", "Add dentist Tuesday at 3 to my calendar")
+    live_app.cfg.raw["calendars"]["default"] = "Home"
+    code, text = live_app.process("d1", "Schedule the thing with the people")
     assert text.startswith("failed") and mac.calls == [] and live_app.notifier.sent[-1].title == "Not done"
 
 
@@ -148,7 +156,7 @@ def test_one_device_failing_does_not_stop_the_others(cfg, fake_fm):
     res = h_home(route("Turn off the living room lights", cfg), ctx)
     n = ctx.notifier.sent[-1]
     assert calls == ["/devices/16/off", "/devices/216/off"]                 # the second was still tried
-    assert res.state == "failed" and res.http_status == 422
+    assert res.state == "partial" and res.http_status == 422
     assert n.title == "Home: partly failed" and "Living Room Overhead Light" in n.text and "Sconces" not in n.text
 
 

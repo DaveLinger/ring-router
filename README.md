@@ -54,7 +54,9 @@ flowchart LR
 
 Apple's **on-device model** (`/usr/bin/fm`) handles the small language jobs for free and offline:
 turning *"ask Terri when she'll be home"* into *"When will you be home?"*, titling notes, splitting
-shopping lists, and reading dates out of reminders and events.
+shopping lists, and naming reminders and events. Dates and times are worked out in code from the
+words you said (the model is poor at calendars: it put "Tuesday" on a Saturday); its date is used
+only for phrases the code can't read, and then the notification says "check the date".
 
 ---
 
@@ -69,9 +71,11 @@ shopping lists, and reading dates out of reminders and events.
 | *"Make a note: the boat trailer needs new bearings"* | 📝 New note titled **"Boat Trailer Bearings Replacement"** |
 | *"Remember I parked on level 3, row G"* | 📝 Saved to the **Remember** folder |
 | *"Add milk, eggs and mac and cheese to my shopping list"* | 🛒 Three reminders: Milk · Eggs · Mac and cheese |
-| *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder due tomorrow 17:00 |
+| *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder due tomorrow 17:00; the receipt reads "Fri Nov 13, 5:00 PM" |
+| *"Remind me in 20 minutes to check the oven"* / *"…on Monday to put the bins out"* | ⏰ Exactly 20 minutes on; a day with no time is due that day |
 | *"Add ring-router test event tomorrow at 3pm to my calendar"* | 📅 One-hour event on your default calendar |
-| *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on Tuesday at 15:00 |
+| *"Add dentist Tuesday at 3 to my calendar"* | 📅 Event on the coming Tuesday at 15:00 ("next Tuesday" = Tuesday of next week) |
+| *"Add dinner with the guys tomorrow from 6 to 8pm to my calendar"* / *"Add Terri's birthday on December 3rd…"* | 📅 Spoken end times are kept; a date with no time is an all-day event |
 | *"Add date night Friday at 7 to our calendar"* | 📅 Goes on the shared calendar (spoken names map to calendars in config) |
 | *"Turn off the living room lights"* | 💡 Every light in that room, via Hubitat |
 | *"Set the master bedroom fan to low"* / *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
@@ -84,6 +88,8 @@ shopping lists, and reading dates out of reminders and events.
 | *"Research the best robot vacuum under $500"* | 🔎 A research note in Apple Notes |
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code investigates on that host |
 | *"What's on my calendar Thursday?"* | 🧠 General agent reads your calendar |
+| *"Is the garage door closed?"* / *"Which kitchen lights are on?"* | 🧠 General agent reads the device state |
+| *"Kitchen lights off"* / *"Shut off the porch light"* | 🧠 Phrasing the fixed commands miss: the agent runs it through the same device matcher |
 | *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 General agent searches the web; follow-ups keep the thread |
 | *"Can you add dinner at the cheapest one Friday at 7 to my calendar?"* | 🧠 Same agent, same thread: question-shaped requests just work |
 | *"Make a new contact named John Smith, 555-1212"* | 👤 General agent creates the contact |
@@ -107,6 +113,20 @@ shopping lists, and reading dates out of reminders and events.
 - **No double texts.** A send that times out is marked unknown and never retried automatically. The
   fixed routes give each mcp-macos or HomeKit call 60 seconds, so a stuck permission prompt can't hang
   a command.
+- **Nothing runs twice.** Every command ends as done, **failed** (nothing happened), **partial** (some
+  of it happened: the notification says which part) or **unknown** (no answer in time). Tapping Retry
+  in the Pebble app reruns only a *failed* one. A command cut off by a restart is reported, not rerun.
+- **Buttons act only when tapped.** `/confirm` links accept POST only, so a link preview can't send or
+  unlock anything; the answer and activity pages can't load or run anything but their own text.
+- **The agent's device control is fenced in.** It uses the same matcher, dry run and confirmations as
+  a spoken command, only acts when your own words were about controlling something, is capped at
+  five actions a request, and an unlock or garage-open through the agent always asks for a tap.
+- **Optional read-back.** With `[home] read_back = true`, a lock, unlock, open or close waits for
+  the device and reports what it actually did ("Front Door locked (confirmed)" or "was told to lock
+  but reports unlocked"). Off by default, because the command then waits on the device.
+- **"Everything" spares the outlets.** "Turn off everything" leaves plugs alone (name one to switch
+  it). Detectors, alarms and sirens are never controlled, and `[home] exclude` lists anything else to
+  keep hands off, whichever backend it is on.
 - **Old recordings ask first.** A message or home command that arrives more than 5 minutes after you
   said it (`[server] max_recording_age_s`) gets a **Run / Cancel** tap instead of running. "Remind me
   in 20 minutes" counts from when you spoke.
@@ -210,6 +230,7 @@ Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_
 | `ring-router recent` | Show recent deliveries |
 | `ring-router check-permissions` | Touch each macOS app and Hubitat once (run via the permcheck launchd job) |
 | `ring-router watchdog` | One health check; Pushcut alert on change |
+| `ring-router selftest` | Read-only check of every backend (Calendar, Reminders, Notes, Contacts, on-device model, home devices); Pushcut alert when one fails. Run daily by `launchd/local.ring-router.selftest.plist` |
 | `ring-router init` | Generate the path token, signing secret and activity token in `.env` |
 
 ---
@@ -231,17 +252,17 @@ Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, 
 `--recorded-ago 3600` (an old recording).
 
 ```sh
-.venv/bin/pytest -q               # everything (321 tests)
+.venv/bin/pytest -q               # everything (446 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
-.venv/bin/pytest -m live          # only those: the exact text each message sends, and the dates
-                                  # pulled out of reminder and calendar requests
+.venv/bin/pytest -m live          # only those: the exact text each message sends, and reminder and
+                                  # calendar times with the real model in the loop
 ```
 
-Two files hold expected failures (`xfail`) rather than passing tests:
-[`tests/test_known_issues.py`](tests/test_known_issues.py) states the behaviour wanted for each
-open issue (a fix turns its test into an "unexpected pass" until the marker is removed), and
-[`tests/test_extract_live.py`](tests/test_extract_live.py) marks the dates the on-device model
-gets wrong today.
+[`tests/test_extract_live.py`](tests/test_extract_live.py) also keeps five expected failures
+(`xfail`): what the on-device model answers on its own for dates the pipeline gets right. To record
+an open issue without fixing it, add a strict `xfail` test to
+[`tests/test_review_fixes.py`](tests/test_review_fixes.py); fixing it later makes that test fail
+until the marker is removed.
 
 [`tests/phrases.toml`](tests/phrases.toml) is the answer key. Each case lists the phrase, the
 route, the text extracted after the prefix, and for messages the exact text that goes out. Add
@@ -255,8 +276,9 @@ phrases as you think of them; the tests fail until the router agrees.
 | --- | --- |
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
-| On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 321 tests | ✅ Done |
+| On-device rewrites, note titles, item splitting, reminder and event titles | ✅ Done (real model) |
+| Dates and times computed in code (`when.py`), the model as fallback | ✅ Done; 21 live cases right, where the model alone got about half |
+| Ring simulator, phrase answer key, 446 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live: text, note, shopping item, reminder and event created end to end through the tunnel |
 | Pushcut notifications and buttons | ✅ Delivered; Send/Cancel and Full answer verified through the tunnel |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
@@ -266,6 +288,8 @@ phrases as you think of them; the tests fail until the router agrees.
 | HomeKit-only devices (front door lock, garage doors, fireplaces, outlets…) | ✅ Live via a patched HomeMCPBridge, limited to one HomeKit home |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
 | Activity page with per-command trace; watchdog down alert | ✅ Live |
+| Agent home tools (device state, control by natural phrasing); lock/door read-back | 🟡 Built and tested with fakes; not yet tried against the real devices |
+| Daily self-test (`ring-router selftest`) | 🟡 Built; launchd job file ready, not installed |
 | Ring Router.app (one macOS identity for all permissions) | ✅ Running the listener; all permissions verified |
 | Claude Code per host | ⬜ Stub; needs SSH to the VPS |
 | Tailscale Funnel tunnel, launchd service | ✅ Running; buttons and answer pages work from the phone |
@@ -292,11 +316,14 @@ ring-router/
 │   │   ├── home.py      #   device catalog, commands, confirmations, scenes
 │   │   └── models.py    #   ask-a-model, research, the general agent
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
+│   ├── when.py        # dates and times worked out from the spoken words (pure functions)
+│   ├── logfile.py     # keeps the launchd log files bounded
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
 │   ├── agents.py      # the general agent (Pydantic AI, web search, tool/action guard)
 │   ├── hubitat.py     # Hubitat Maker API: devices, spoken-name matching, commands
 │   ├── activity.py    # activity page + per-command trace view
 │   ├── watchdog.py    # down alert
+│   ├── selftest.py    # daily read-only check of every backend
 │   ├── md.py          # Markdown → HTML for the answer page and research notes
 │   ├── mcp.py         # minimal stdio MCP client for mcp-macos
 │   ├── notify.py      # console + Pushcut notifiers

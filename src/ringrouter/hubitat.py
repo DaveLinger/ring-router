@@ -38,8 +38,20 @@ class Device:
     backend: str = "hubitat"          # hubitat | homekit
 
     @property
+    def is_outlet(self) -> bool:
+        """A plug: left alone by "everything" (it may be feeding a fridge or a server), fine by name."""
+        return (self.attrs.get("type") == "outlet" or "Outlet" in self.caps
+                or bool({"outlet", "plug"} & set(_words(self.label))))
+
+    @property
     def is_light(self) -> bool:
         return bool(LIGHT_WORDS & set(_words(self.label))) or "light" in self.label.lower()
+
+
+def excluded(label: str, names: set[str]) -> bool:
+    """Never controlled: a label on the exclude list, or one naming a detector, alarm or siren."""
+    low = label.lower()
+    return low in names or any(w in low for w in DEFAULT_EXCLUDE_WORDS)
 
 
 @dataclass
@@ -73,6 +85,12 @@ class Catalog:
         raise NotImplementedError
 
     def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
+        raise NotImplementedError
+
+    def state(self, device: Device) -> dict:
+        """Current state, in one shape for every backend. Keys present only when known:
+        on (bool), level (0-100), locked (bool), door (open|closed|opening|closing|stopped),
+        speed (str), reachable (bool)."""
         raise NotImplementedError
 
     def rooms(self) -> set[str]:
@@ -113,7 +131,7 @@ class Hubitat(Catalog):
             for d in self._fetch("/devices/all"):
                 label = d.get("label") or d.get("name") or ""
                 caps = {c if isinstance(c, str) else next(iter(c)) for c in d.get("capabilities", [])}
-                if label.lower() in self.exclude or any(w in label.lower() for w in DEFAULT_EXCLUDE_WORDS):
+                if excluded(label, self.exclude):
                     continue
                 if not caps & CONTROL_CAPS:
                     continue
@@ -121,12 +139,26 @@ class Hubitat(Catalog):
             self._cache, self._cache_t = out, time.time()
         return self._cache
 
+    def state(self, device: Device) -> dict:
+        info = self._fetch(f"/devices/{device.id}")
+        attrs = {a.get("name"): a.get("currentValue") for a in info.get("attributes", []) if isinstance(a, dict)}
+        out: dict = {}
+        if attrs.get("switch") in ("on", "off"):
+            out["on"] = attrs["switch"] == "on"
+        if str(attrs.get("level", "")).isdigit():
+            out["level"] = int(attrs["level"])
+        if attrs.get("lock") in ("locked", "unlocked"):
+            out["locked"] = attrs["lock"] == "locked"
+        if attrs.get("door"):
+            out["door"] = str(attrs["door"])
+        if attrs.get("speed"):
+            out["speed"] = str(attrs["speed"])
+        return out
+
     # -- commands ------------------------------------------------------------
     def command(self, device: Device, cmd: str, value: str | None = None) -> dict:
         path = f"/devices/{device.id}/{cmd}" + (f"/{urllib.request.quote(str(value))}" if value is not None else "")
-        out = self._fetch(path)
-        self._cache = None          # state changed
-        return out
+        return self._fetch(path)     # the catalog holds names and capabilities, not state: no need to refetch
 
 
 def _match(self, target: str, action: str) -> Match:
@@ -148,7 +180,7 @@ def _match(self, target: str, action: str) -> Match:
     # "all the lights" / "the lights" / "everything"
     everything = tw == ["everything"]
     if everything or (t.startswith(("all ", "every ")) and tw == ["light"]):
-        hits = [d for d in pool if everything or d.is_light]
+        hits = [d for d in pool if (not d.is_outlet if everything else d.is_light)]
         return Match(hits, "all" if hits else "none", "everything" if everything else "all lights")
 
     # exact label
@@ -187,6 +219,24 @@ def _match(self, target: str, action: str) -> Match:
                 return Match(picked, "device", f"preferred {pref!r}")
         return Match([s[2] for s in close[:4]], "ambiguous")
     return Match([best[2]], "device")
+
+
+def describe_state(st: dict) -> str:
+    """'locked' / 'closed' / 'on, 40%' / 'not responding' for a state() result."""
+    if st.get("reachable") is False:
+        return "not responding"
+    parts = []
+    if "locked" in st:
+        parts.append("locked" if st["locked"] else "unlocked")
+    if "door" in st:
+        parts.append(st["door"])
+    if "on" in st:
+        parts.append("on" if st["on"] else "off")
+    if st.get("on") and "level" in st:
+        parts.append(f"{st['level']}%")
+    if st.get("on") and st.get("speed") not in (None, "off", "on"):
+        parts.append(f"speed {st['speed']}")
+    return ", ".join(parts) or "state unknown"
 
 
 def parse_value(action: str, rest: str) -> tuple[str, str | None]:

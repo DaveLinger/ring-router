@@ -43,6 +43,12 @@ text = """
 Split the user's spoken shopping request into separate items. Keep multi-word \
 items together (e.g. 'mac and cheese', 'paper towels'). Keep quantities with their item."""
 
+# For both of these, only the TITLE is taken on trust. The date and time are worked out in code
+# (src/ringrouter/when.py) from the words that were said; the model's date is used only for phrases
+# the code can't read, and is then flagged "check the date". Measured on 22 phrases the model alone
+# got 12 right, and a longer prompt with a calendar table also got 12 (different ones, and worse
+# titles), so these stay short.
+
 [reminder_extract]   # LIVE (fm, structured output: {"title", "due"})
 # The prompt also carries the current date, time and time zone.
 text = "Extract the reminder title and due time from the request."
@@ -90,10 +96,17 @@ Use Markdown."""
 # Tools: Calendar, Reminders, Notes (read/write); Contacts (read, create, update); web_search;
 # run_command (hands a noise-trimmed command, copied word-for-word, back to the router);
 # Messages read-only if [agents] read_messages = true. It can't email or text anyone.
+# home_status (reads device state) and home_control (same matcher and confirmations as a spoken
+# home command; unlock and open always ask for a tap).
 text = """
 You handle the user's spoken questions and requests. Answer questions about their own data \
 (calendar, reminders, notes, contacts) with the read tools, and about the wider world with \
 web_search (write a specific, self-contained query). Carry out requests with the tools provided.
+
+For home devices (lights, fans, locks, garage doors): answer questions about their state with \
+home_status, and carry out a request to control one with home_control, naming the device or room \
+the way the user did. Only control what the user asked for in this request; if they said not to \
+do something ('don't turn off the lights'), don't.
 
 Earlier turns of the conversation may be included, so resolve words like 'those', 'that one' \
 or 'it' from them. Do exactly what was asked and nothing more.

@@ -14,6 +14,7 @@ This module holds the route table (HANDLERS) and the two entry points, run() and
 from __future__ import annotations
 
 import logging
+import subprocess
 from typing import Callable
 
 from ..notify import Button, Notice  # noqa: F401  (re-exported)
@@ -22,7 +23,8 @@ from .apple import (EVENT_SCHEMA, GEO_PATTERNS, REMINDER_SCHEMA, applescript_not
                     h_calendar, h_geo_reminder, h_list_add, h_note, h_reminder, h_remember, my_card_address,
                     parse_geo)
 from .context import Context, Result
-from .home import CMD_TO_ACTION, execute_home, get_hubitat, h_home, h_scene, run_home  # noqa: F401
+from .home import (CMD_TO_ACTION, execute_home, get_hubitat, h_home, h_scene, home_status, read_back,  # noqa: F401
+                   run_home)
 from .messages import compose_imessage, h_imessage, parse_contacts, resolve_handle, send_imessage  # noqa: F401
 from .models import AGENT_THREAD, _default_agent_runner, h_agent, h_llm, h_research, system_prompt  # noqa: F401
 
@@ -81,6 +83,11 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
 def run(r: Route, ctx: Context) -> Result:
     try:
         return HANDLERS[r.route](r, ctx)
+    except (TimeoutError, subprocess.TimeoutExpired) as e:      # no answer: we can't know if it happened
+        log.exception("handler %s timed out", r.route)
+        ctx.notify("Status unknown", f"{r.route}: no answer in time ({e}). It may or may not have happened, "
+                                     f"so check before saying it again. Heard: “{r.transcript}”")
+        return Result("unknown", f"{r.route} timed out: {e}", 422)
     except Exception as e:
         log.exception("handler %s failed", r.route)
         ctx.notify("Error", f"{r.route}: {e}. Heard: “{r.transcript}”")

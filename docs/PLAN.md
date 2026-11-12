@@ -57,7 +57,11 @@ Adapted from [th3walkingdud3/peeble-ring-router](https://github.com/th3walkingdu
 1. Secret URL path (`/hook/<token>`); a wrong path gets **404**.
 2. Constant-time HMAC check and a ±5-minute timestamp window; failure gets **401**.
 3. Test events get 200 and run nothing; other triggers are ignored.
-4. De-duplicate by `X-Index-Delivery` in SQLite; repeats get 200 and don't run again.
+4. De-duplicate by `X-Index-Delivery` in SQLite; repeats get 200 and don't run again. One exception:
+   a delivery that ended **failed** (nothing happened) runs again when it is resent, which is what
+   the app's Retry does. **partial** (some of it happened) and **unknown** (no answer in time) never
+   rerun. A job still in flight when the service stops is marked unknown at the next start and the
+   owner is told; it is not run again.
 5. Parse the multipart body; drop the audio part.
 6. A send that times out is marked `unknown`, gets **422**, and is **never re-sent automatically**.
    Every mcp-macos / HomeMCPBridge call from the fixed routes has a hard 60-second limit (the server
@@ -192,6 +196,10 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 - **Claude Code:** hosts and spoken names are in config; unknown hosts are refused; default is the
   Mac mini. "Ask" and "tell" mean the same thing; what Claude Code may do is set per host in config, not by wording.
 - **Shopping list:** on-device structured output splits items, so "mac and cheese" stays one item.
+  If an item fails the rest are still tried, and the notification lists what was added and what
+  wasn't; if Reminders stops answering, the remaining items are not tried.
+- **Location reminders** are for home only. "When I leave work" or "when I arrive at the office" is
+  refused rather than turned into a home geofence.
 - **Remember:** one note each, because macos-mcp caps note bodies at 2,000 characters.
 - **Research:** like "ask ChatGPT" but the output is a note; written via AppleScript to avoid the 2,000-character cap.
 
@@ -212,6 +220,8 @@ landed on an agent that couldn't write. One agent with a shared conversation thr
 | Contacts | read, create, update |
 | web_search | the agent writes its own query; one OpenRouter web-plugin call (`[agents] web_search_model`) |
 | run_command | hands a noise-trimmed, word-for-word command back to the router (see below) |
+| home_status | reads what devices report: locked, open, on, level (`[agents] home_tools`) |
+| home_control | on, off, set, dim, brighten, lock, unlock, open, close, through the same matcher as a spoken command (see below) |
 | Messages | read only, and only if `[agents] read_messages = true` (needs Full Disk Access) |
 | Mail | none |
 
@@ -234,6 +244,13 @@ landed on an agent that couldn't write. One agent with a shared conversation thr
   (`[agents] confirm_rerouted_messages`), and so does a rerouted unlock or garage-open
   (`[agents] confirm_rerouted_home`; spoken directly, those still just run); the rerouted route sends
   the only notification.
+- **Home tools:** "Is the garage door closed?" and "Kitchen lights off" miss every fixed prefix, so
+  the agent gets `home_status` and `home_control`. Control is not a second code path: it calls the
+  home route's own `run_home`, so the deterministic matcher, ambiguity refusal, exclusions, dry run
+  and notifications are the same. On top of that, in code: the user's words (not tool output) must
+  be about controlling something; at most `[agents] max_home_actions` (5) per request; unlock and
+  open through the agent always need a tap (`[agents] confirm_rerouted_home`), unlike the spoken
+  command. `home_status` reads at most eight devices per call (each HomeKit read starts the bridge).
 - **Follow-ups:** the agent keeps one conversation thread (10-minute window), passed as message history,
   so "Which of those is cheapest?" or "Why isn't the Tesla Model S Plaid on this list?" work naturally.
 - Instructions combine the spoken-transcript preamble, `profile.md`, `prompts.toml` and the current date/time.
@@ -265,7 +282,18 @@ The Mac can't set the iPhone's Clock timers or alarms, and substitutes aren't wo
 
 macOS 27 ships Apple's on-device model as `/usr/bin/fm`: free, offline, ~0.35 s per call. It runs in
 **greedy** mode, so the same input always gives the same output (no time cost). It handles "ask"
-rewrites, note titles, shopping-item splits, and reminder/event extraction.
+rewrites, note titles, shopping-item splits, and the titles of reminders and events.
+
+**Dates are not its job.** Tested on 22 spoken reminders and events with a pinned clock, the model
+alone got 12 right: "Tuesday" came back as a Saturday, "in 20 minutes" as 29, a reminder with no time
+was due immediately, spoken end times and all-day dates were dropped. A longer prompt with a table
+of the next two weeks fixed the weekdays and broke other things (invented end times, times left in
+titles): 12 of 22 again. So `when.py` computes the time from the words (today / tomorrow / weekdays /
+"next Tuesday" / dates / clock times / ranges / "in 20 minutes"), the model's answer is used only
+for am-or-pm on a bare "at 7" and for phrases the code can't read (a holiday, "the end of the
+month"), and a date that came from the model is flagged "check the date". With that, all 22 are
+right, and reminders keep their time even when the model is down. Receipts show the weekday
+("Tue Nov 17, 3:00 PM") so a wrong date is obvious.
 
 | You say | Sent |
 | --- | --- |
@@ -296,6 +324,18 @@ Two backends behind one set of spoken names, combined into one catalog:
   output, excluded in `[hubitat] exclude`.
 - **HomeKit** (the superset) only for HomeKit-native devices. HomeKit entries whose manufacturer is
   "Hubitat" are bridged duplicates and are skipped.
+- **Never controlled:** anything named a detector, alarm or siren, and every label in
+  `[home] exclude`, `[hubitat] exclude` or `[homekit] exclude`. The lists are merged and apply to both
+  backends, so a device kept out of Hubitat can't come back through HomeKit.
+- **"Everything"** means every switchable device except outlets and plugs (which may be feeding a
+  fridge or a server); a named outlet still works.
+- **Read-back (`[home] read_back`, off by default):** after lock, unlock, open or close, the device is
+  polled (every `read_back_every_s`, up to `read_back_timeout_s`) until it reports the wanted
+  state. Then the receipt says "(confirmed)"; if it never gets there the result is *partial* and
+  the notification says what it reports instead. Off by default because the command waits on the
+  device, and because not everyone wants it.
+- **A backend that doesn't answer** is reported as unreachable, not as "No device matching". When
+  several devices are commanded and some fail, the result is *partial* and names the ones that failed.
 - HomeMCPBridge is patched (`vendor/patches/HomeMCPBridge-ring-router.patch`): `HOMEMCP_HOMES`
   limits it to one HomeKit home (`[homekit] homes = ["7 Aztec Court"]`; the other homes are invisible),
   and devices are controlled by exact ID, since names repeat. `[homekit] exclude_rooms` hides rooms

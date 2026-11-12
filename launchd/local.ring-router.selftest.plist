@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Daily self-test: runs `ring-router selftest` at 04:10 through Ring Router.app, so the read-only
+     checks use the service's own macOS permissions. Pushcut alert when a check fails.
+     Install:
+       cp launchd/local.ring-router.selftest.plist ~/Library/LaunchAgents/
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.ring-router.selftest.plist
+     Run it now:  launchctl kickstart gui/$(id -u)/local.ring-router.selftest
+     Log: ~/Library/Logs/ring-router-selftest.log -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.ring-router.selftest</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dave/claude-mac-mini/ring-router/build/Ring Router.app/Contents/MacOS/RingRouter</string>
+        <string>/Users/dave/claude-mac-mini/ring-router/.venv/bin/ring-router</string>
+        <string>selftest</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dave/claude-mac-mini/ring-router</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>10</integer>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/Users/dave/Library/Logs/ring-router-selftest.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dave/Library/Logs/ring-router-selftest.log</string>
+</dict>
+</plist>

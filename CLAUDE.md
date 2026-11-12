@@ -18,6 +18,9 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 | The agent may `update`/`delete` only when the user's words ask for a change | Text it reads (invites, web pages) must not be able to trigger changes. Costs the odd implied request ("I already called the vet"). `[agents] require_write_intent`, `max_deletes`. |
 | Old recordings (over `[server] max_recording_age_s`) ask before sending or controlling anything | Push-to-talk means intent *at the time*. Assumes `recordedAt` is Unix ms; an unbelievable value is ignored. |
 | Contact lookup refuses unless exactly one card matches | Never guess a number. Pinning `handle` per recipient is preferred. |
+| Reminder and event times are computed in `when.py`, not taken from `fm` | The model is poor at calendar arithmetic (measured: 12 of 22 right, with or without a more detailed prompt). It supplies the title, am/pm for a bare "at 7", and a flagged fallback for phrases the code can't read. Extend `when.py` (with cases in `tests/test_when.py`) rather than the prompt. |
+| `failed` / `partial` / `unknown` are different states | Only `failed` (nothing happened) may run again when the same delivery is resent. A timeout is `unknown`, never `failed`. |
+| `/confirm` is POST only; "everything" skips outlets | A link preview must not act; a plug may be feeding a fridge. |
 | Hubitat calls go through `/usr/bin/curl`, not urllib | macOS Local Network privacy silently blocks the launchd-run Homebrew Python ("No route to host"). Curl under Ring Router.app gets through. |
 | A Swift launcher, `Ring Router.app`, wraps a Python service | One stable macOS identity for every privacy grant (Local Network, Calendars, Contacts, Automation, HomeKit). Signed with an Apple Development cert so grants survive rebuilds. |
 | Vendored, patched `mcp-macos` and HomeMCPBridge (`vendor/patches/`) | iCloud-only calendars (a Google account is mirrored in by calsync), one HomeKit home, lookup by exact device id, Fan v2 support. |
@@ -38,9 +41,10 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
   messages, the exact text sent. New routing behavior should come with cases there.
 - `config.toml`, `.env` and `profile.md` are git-ignored and absent from the repo. Tests use
   `config.example.toml`.
-- `tests/test_known_issues.py` lists open issues as strict `xfail` tests that state the wanted
-  behaviour: fixing one means removing its marker. `tests/test_extract_live.py` does the same
-  (non-strict) for dates the on-device model gets wrong.
+- `tests/test_review_fixes.py` pins each fix from the November 2026 review. Record a new open issue
+  there as a strict `xfail` test that states the wanted behaviour; fixing it means removing the
+  marker. `tests/test_extract_live.py` keeps (non-strict) `xfail`s for what the on-device model
+  answers on its own.
 
 ## Safety rules for assistants
 

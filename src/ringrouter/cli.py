@@ -186,6 +186,15 @@ def cmd_watchdog(args) -> int:
     return 0
 
 
+def cmd_selftest(args) -> int:
+    from .logfile import trim_own_log  # noqa: PLC0415
+    from .selftest import run_once  # noqa: PLC0415
+    trim_own_log()
+    report = run_once(load_config(args.config))
+    print(time.strftime("%F %T"), "self-test\n" + report, flush=True)
+    return 1 if "FAIL" in report else 0
+
+
 def cmd_recent(args) -> int:
     from .store import Store  # noqa: PLC0415
     cfg = load_config(args.config, load_secrets=False)
@@ -222,6 +231,8 @@ def main(argv=None) -> int:
     s.set_defaults(fn=cmd_check_permissions)
     s = sub.add_parser("watchdog", help="health check; Pushcut alert when the listener or tunnel is down")
     s.set_defaults(fn=cmd_watchdog)
+    s = sub.add_parser("selftest", help="read-only check of every backend; Pushcut alert when one fails")
+    s.set_defaults(fn=cmd_selftest)
     s = sub.add_parser("recent"); s.add_argument("-n", type=int, default=20); s.set_defaults(fn=cmd_recent)
 
     args = ap.parse_args(argv)
