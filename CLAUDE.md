@@ -38,6 +38,9 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
   messages, the exact text sent. New routing behavior should come with cases there.
 - `config.toml`, `.env` and `profile.md` are git-ignored and absent from the repo. Tests use
   `config.example.toml`.
+- `tests/test_known_issues.py` lists open issues as strict `xfail` tests that state the wanted
+  behaviour: fixing one means removing its marker. `tests/test_extract_live.py` does the same
+  (non-strict) for dates the on-device model gets wrong.
 
 ## Safety rules for assistants
 

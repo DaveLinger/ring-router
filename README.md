@@ -231,10 +231,17 @@ Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, 
 `--recorded-ago 3600` (an old recording).
 
 ```sh
-.venv/bin/pytest -q               # everything (212 tests)
+.venv/bin/pytest -q               # everything (321 tests)
 .venv/bin/pytest -m "not live"    # skip the tests that call the real on-device model
-.venv/bin/pytest -m live          # only those: checks the exact text each message sends
+.venv/bin/pytest -m live          # only those: the exact text each message sends, and the dates
+                                  # pulled out of reminder and calendar requests
 ```
+
+Two files hold expected failures (`xfail`) rather than passing tests:
+[`tests/test_known_issues.py`](tests/test_known_issues.py) states the behaviour wanted for each
+open issue (a fix turns its test into an "unexpected pass" until the marker is removed), and
+[`tests/test_extract_live.py`](tests/test_extract_live.py) marks the dates the on-device model
+gets wrong today.
 
 [`tests/phrases.toml`](tests/phrases.toml) is the answer key. Each case lists the phrase, the
 route, the text extracted after the prefix, and for messages the exact text that goes out. Add
@@ -249,7 +256,7 @@ phrases as you think of them; the tests fail until the router agrees.
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, test events | ✅ Done |
 | Router: cancels, scenes, prefixes, recipient tiers, timer refusal | ✅ Done |
 | On-device rewrites, note titles, item splitting, date extraction | ✅ Done (real model) |
-| Ring simulator, phrase answer key, 212 tests | ✅ Done |
+| Ring simulator, phrase answer key, 321 tests | ✅ Done |
 | iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live: text, note, shopping item, reminder and event created end to end through the tunnel |
 | Pushcut notifications and buttons | ✅ Delivered; Send/Cancel and Full answer verified through the tunnel |
 | Ask a model: OpenRouter, web search, follow-ups, `profile.md`, answer page | ✅ Live-tested with all four models |
