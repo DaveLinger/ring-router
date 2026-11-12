@@ -110,6 +110,13 @@ class LLMStore:
             prev_ts = ts
         return list(reversed(out))
 
+    def prune(self, days: int = 90) -> None:
+        """Forget saved answers and conversation turns older than `days` (their answer pages go too)."""
+        cutoff = time.time() - days * 86400
+        with self.s.lock:
+            self.s.conn.execute("DELETE FROM convo WHERE ts < ?", (cutoff,))
+            self.s.conn.execute("DELETE FROM answers WHERE created < ?", (cutoff,))
+
     def remember(self, model_key: str, question: str, answer: str) -> None:
         now = time.time()
         with self.s.lock:

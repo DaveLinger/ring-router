@@ -68,6 +68,12 @@ class AgentSpec:
     calls: list[dict] = field(default_factory=list)   # audit log of tool calls this run
     citations: list[dict] = field(default_factory=list)   # sources found by web_search this run
     rerouted: list[dict] = field(default_factory=list)    # commands handed back to the router
+    cost: float | None = None       # USD for this run (agent model + web searches), when OpenRouter reports it
+    usage: dict = field(default_factory=dict)             # requests and tokens used by the agent model
+
+    def add_cost(self, usd: float | None) -> None:
+        if usd is not None:
+            self.cost = (self.cost or 0.0) + float(usd)
 
 
 def spec_for(kind: str, cfg, request: str = "", history: list[dict] | None = None) -> AgentSpec:
@@ -171,8 +177,9 @@ def default_mcp_source(cfg):
     return StdioTransport(command=cmd[0], args=list(cmd[1:]), env=macos_mcp_env(cfg))
 
 
-def default_searcher(cfg) -> Callable[[str], tuple[str, list[dict]]]:
-    """web_search backend: one OpenRouter call with the web plugin, summarised with sources."""
+def default_searcher(cfg, on_cost: Callable[[float | None], None] | None = None) -> Callable[[str], tuple[str, list[dict]]]:
+    """web_search backend: one OpenRouter call with the web plugin, summarised with sources.
+    on_cost is told what each search cost."""
     from .llm import OpenRouter  # noqa: PLC0415
 
     ac = cfg.section("agents")
@@ -184,6 +191,8 @@ def default_searcher(cfg) -> Callable[[str], tuple[str, list[dict]]]:
             {"role": "system", "content": "Answer the search query factually and concisely from current web "
                                           "results. Include specifics (names, addresses, prices, dates)."},
             {"role": "user", "content": query}], web=True, web_results=int(ac.get("web_results", 5)))
+        if on_cost:
+            on_cost(reply.cost)
         return reply.text, reply.citations
 
     return search
@@ -247,9 +256,10 @@ def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None
               from the top. Enables the run_command tool.
     """
     from pydantic_ai import Agent, Tool  # noqa: PLC0415
+    from pydantic_ai.usage import UsageLimits  # noqa: PLC0415
 
     spec = spec_for(kind, cfg, request, history)
-    search = searcher or default_searcher(cfg)
+    search = searcher or default_searcher(cfg, on_cost=spec.add_cost)
 
     def web_search(query: str) -> str:
         """Search the web for current information (places, prices, news, facts). Write a specific,
@@ -296,5 +306,20 @@ def run_agent(kind: str, request: str, cfg, *, history: list[dict] | None = None
     agent = Agent(model or default_model(cfg), instructions=instructions(spec),
                   toolsets=[build_toolset(spec, mcp_source or default_mcp_source(cfg))],
                   tools=tools, retries=2, tool_timeout=180)
-    result = agent.run_sync(request, message_history=history_messages(history or []) or None)
+    # A run that keeps calling tools stops at max_requests model calls instead of running up a bill.
+    limits = UsageLimits(request_limit=int(cfg.section("agents").get("max_requests", 12)))
+    result = agent.run_sync(request, message_history=history_messages(history or []) or None, usage_limits=limits,
+                            model_settings={"openrouter_usage": {"include": True}})   # ask OpenRouter for the cost
+    _record_usage(spec, result)
     return str(result.output).strip(), spec
+
+
+def _record_usage(spec: AgentSpec, result) -> None:
+    """Requests, tokens and (when OpenRouter reports it) cost of the agent's own model calls."""
+    try:
+        u = result.usage
+        spec.usage = {"requests": u.requests, "input_tokens": u.input_tokens, "output_tokens": u.output_tokens}
+        for m in result.new_messages():
+            spec.add_cost((getattr(m, "provider_details", None) or {}).get("cost"))
+    except Exception:       # accounting must never break a run that already succeeded
+        log.debug("agent usage not recorded", exc_info=True)

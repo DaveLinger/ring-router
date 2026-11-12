@@ -31,7 +31,7 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest -q -m "not live"     # unit + integration (fakes for fm, OpenRouter, MCP, Hubitat, HomeKit)
 .venv/bin/pytest -q -m live           # exact message text via the real on-device model (macOS 27 only)
-.venv/bin/ring-router route "phrase"  # offline routing decision (always dry run)
+.venv/bin/ring-router route "phrase"  # routing decision + dry-run handler; cloud-model routes need --online
 ```
 
 - `tests/phrases.toml` is the **answer key**: each phrase, its route, the extracted text and, for

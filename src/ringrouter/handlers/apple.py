@@ -41,6 +41,9 @@ def applescript_note(title: str, body_html: str, folder: str) -> None:
 
 # ------------------------------------------------------------- Apple apps ----
 
+NOTE_MCP_LIMIT = 2000    # characters mcp-macos accepts in a note body
+
+
 def h_note(r: Route, ctx: Context, folder: str | None = None, route_name: str = "note") -> Result:
     folder = folder or r.params.get("folder", "Notes")
     try:
@@ -52,9 +55,20 @@ def h_note(r: Route, ctx: Context, folder: str | None = None, route_name: str = 
     if ctx.dry(route_name):
         ctx.notify("Dry run", f"Would create note “{title}” in {folder}")
         return Result("dry_run", f"DRY RUN: would create note {title!r} in {folder!r}: {r.body[:2000]!r}")
-    ctx.mcp_call("notes_items", {"action": "create", "title": title, "body": r.body[:2000], "folder": folder})
-    ctx.notify("Note created", f"{title} ({folder})")
-    return Result("done", f"note {title!r} in {folder!r}")
+    cut = ""
+    if len(r.body) > NOTE_MCP_LIMIT:    # mcp-macos caps a note body; the AppleScript writer doesn't
+        try:
+            import html as _html  # noqa: PLC0415
+            ctx.notes_writer(title, "".join(f"<p>{_html.escape(p)}</p>" for p in r.body.split("\n") if p.strip()),
+                             folder)
+            ctx.notify("Note created", f"{title} ({folder})")
+            return Result("done", f"note {title!r} in {folder!r} ({len(r.body)} characters)")
+        except Exception as e:
+            log.warning("long note via AppleScript failed (%s); saving the first %d characters", e, NOTE_MCP_LIMIT)
+            cut = f", cut at {NOTE_MCP_LIMIT:,} of {len(r.body):,} characters"
+    ctx.mcp_call("notes_items", {"action": "create", "title": title, "body": r.body[:NOTE_MCP_LIMIT], "folder": folder})
+    ctx.notify("Note created", f"{title} ({folder}{cut})")
+    return Result("done", f"note {title!r} in {folder!r}{cut}")
 
 
 def h_remember(r: Route, ctx: Context) -> Result:

@@ -20,7 +20,7 @@ from .text import similarity
 ACTION_CAPS = {"on": "Switch", "off": "Switch", "level": "SwitchLevel", "speed": "FanControl",
                "lock": "Lock", "unlock": "Lock", "open": "DoorControl", "close": "DoorControl"}
 CONTROL_CAPS = {"Switch", "SwitchLevel", "FanControl", "Lock", "DoorControl", "GarageDoorControl"}
-LIGHT_WORDS = ("light", "lights", "lamp", "sconce", "sconces", "pendant", "bulb")
+LIGHT_WORDS = {"light", "lamp", "sconce", "pendant", "bulb"}      # singular; _words() drops the plural s
 FAN_SPEEDS = {"low": "low", "medium low": "medium-low", "medium-low": "medium-low", "medium": "medium",
               "medium high": "medium-high", "medium-high": "medium-high", "high": "high", "max": "high",
               "full": "high", "auto": "auto"}
@@ -39,7 +39,7 @@ class Device:
 
     @property
     def is_light(self) -> bool:
-        return any(w in self.label.lower().split() for w in LIGHT_WORDS) or "light" in self.label.lower()
+        return bool(LIGHT_WORDS & set(_words(self.label))) or "light" in self.label.lower()
 
 
 @dataclass

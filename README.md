@@ -150,7 +150,9 @@ tailscale funnel --bg 8642                                                      
 ```
 
 Set `[server] public_url` to the Funnel address so notification buttons, answer pages and the
-activity page work from your phone. Logs: `~/Library/Logs/ring-router.log` (and `-watchdog.log`).
+activity page work from your phone. Logs: `~/Library/Logs/ring-router.log` (and `-watchdog.log`);
+each is cut back to its last 1 MB once it passes 5 MB. Activity, saved answers and conversations
+older than `[server] retention_days` (90) are deleted.
 
 <details>
 <summary><b>Why "Ring Router.app", and granting macOS permissions</b></summary>
@@ -202,7 +204,7 @@ Add optional keys with `ring-router set-secret openrouter_api_key` (or `pushcut_
 | Command | Does |
 | --- | --- |
 | `ring-router serve` | Run the listener |
-| `ring-router route "phrase"` | Route a phrase offline and show what would happen |
+| `ring-router route "phrase"` | Route a phrase and show what would happen (dry run). Routes that call a cloud model only run with `--online` |
 | `ring-router sim "phrase" …` | Send phrases to the running listener exactly as the ring would |
 | `ring-router sim --file tests/phrases.toml` | Send the whole phrase list |
 | `ring-router recent` | Show recent deliveries |
@@ -225,7 +227,8 @@ $ ring-router sim "Ask Terri when she'll be home." "Tell Sherry I'm on my way"
   ← 200 needs_confirm: [imessage] weak match 'sherry' -> Terri; confirmation Cf6-iuBYDYrgXUpe
 ```
 
-Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`.
+Flags: `--test-event`, `--replay` (dedupe check), `--bad-signature`, `--audio`, `--trigger double-click-hold`,
+`--recorded-ago 3600` (an old recording).
 
 ```sh
 .venv/bin/pytest -q               # everything (212 tests)

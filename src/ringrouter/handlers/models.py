@@ -119,7 +119,8 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
         return Result("failed", f"{kind} agent error: {e}")
     ctx.llm_store.remember(AGENT_THREAD, r.body, text)
     ctx.trace("agent", kind=kind, history_turns=len(history) // 2, tool_calls=list(spec.calls),
-              sources=list(getattr(spec, "citations", [])), reply=text)
+              sources=list(getattr(spec, "citations", [])), reply=text,
+              cost=getattr(spec, "cost", None), **getattr(spec, "usage", {}))
     if getattr(spec, "rerouted", None):   # the rerouted route already notified the user
         rr = spec.rerouted[0]
         return Result("done", f"agent rerouted {rr['command']!r} -> {rr['route']}: {rr['summary']}")
@@ -131,7 +132,8 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
     buttons = []
     if len(md.plain(text)) > limit or spec.citations:
         model_id = ctx.cfg.section("agents").get("model", "anthropic/claude-sonnet-5.5")
-        aid = ctx.llm_store.save_answer(kind, model_id, r.body, Reply(text, spec.citations, model_id))
+        aid = ctx.llm_store.save_answer(kind, model_id, r.body,
+                                        Reply(text, spec.citations, model_id, cost=getattr(spec, "cost", None)))
         buttons = [Button("Full answer", f"{ctx.public_url}/answers/{aid}")]
     ctx.notify(label + (" (dry run)" if dry else ""), _short(text, limit), buttons)
     follow = f", follow-up of {len(history) // 2}" if history else ""

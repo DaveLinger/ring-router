@@ -2,7 +2,8 @@
 
   ring-router init                 create path token + signing secret in .env
   ring-router serve                run the listener
-  ring-router route "phrase"       route a phrase offline and run its handler (dry run, console)
+  ring-router route "phrase"       route a phrase and run its handler in dry run (cloud-model routes
+                                   only with --online)
   ring-router sim "phrase" ...     send phrases to the running listener exactly as the ring would
   ring-router sim --file tests/phrases.toml
   ring-router recent               show recent deliveries
@@ -55,6 +56,7 @@ def cmd_serve(args) -> int:
 
 
 def cmd_route(args) -> int:
+    from .handlers import SLOW_ROUTES  # noqa: PLC0415
     from .router import route  # noqa: PLC0415
     from .server import App  # noqa: PLC0415
     from .store import Store  # noqa: PLC0415
@@ -66,9 +68,13 @@ def cmd_route(args) -> int:
     for phrase in args.phrases:
         r = route(phrase, cfg)
         print(f"▶ {phrase}\n  {r.describe()}")
-        if not args.no_run:
-            code, text = app.process(f"local-{time.time_ns()}", phrase)
-            print(f"  → {code} {text}")
+        if args.no_run:
+            continue
+        if r.route in SLOW_ROUTES and not args.online:   # these call a cloud model: real requests, real money
+            print("  → not run: this route calls a cloud model (add --online to run it)")
+            continue
+        code, text = app.process(f"local-{time.time_ns()}", phrase)
+        print(f"  → {code} {text}")
     return 0
 
 
@@ -173,7 +179,9 @@ def cmd_check_permissions(args) -> int:
 
 
 def cmd_watchdog(args) -> int:
+    from .logfile import trim_own_log  # noqa: PLC0415
     from .watchdog import run_once  # noqa: PLC0415
+    trim_own_log()
     print(time.strftime("%F %T"), run_once(load_config(args.config)), flush=True)
     return 0
 
@@ -197,7 +205,9 @@ def main(argv=None) -> int:
     s = sub.add_parser("set-secret"); s.add_argument("name"); s.set_defaults(fn=cmd_set_secret)
     s = sub.add_parser("serve"); s.set_defaults(fn=cmd_serve)
     s = sub.add_parser("route"); s.add_argument("phrases", nargs="+")
-    s.add_argument("--no-run", action="store_true", help="only show the routing decision"); s.set_defaults(fn=cmd_route)
+    s.add_argument("--no-run", action="store_true", help="only show the routing decision")
+    s.add_argument("--online", action="store_true", help="also run routes that call a cloud model (costs money)")
+    s.set_defaults(fn=cmd_route)
     s = sub.add_parser("sim"); s.add_argument("phrases", nargs="*")
     s.add_argument("--file", help=f"TOML phrase list (e.g. {PROJECT_DIR / 'tests/phrases.toml'})")
     s.add_argument("--url"); s.add_argument("--trigger", default="single-click-hold")

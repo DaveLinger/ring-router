@@ -17,7 +17,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import activity, handlers, md, protocol
+from . import activity, handlers, logfile, md, protocol
 from .config import Config
 from .fm import FM
 from .handlers import Context, Result
@@ -29,6 +29,12 @@ from .store import Store
 
 log = logging.getLogger(__name__)
 MAX_BODY = 20 * 1024 * 1024
+
+
+def same(a: str, b: str) -> bool:
+    """Constant-time comparison of two strings. (hmac.compare_digest raises on non-ASCII str, and a
+    request path can hold any byte.)"""
+    return hmac.compare_digest(a.encode("utf-8", "surrogatepass"), b.encode("utf-8", "surrogatepass"))
 
 
 def recorded_time(value, now: float | None = None) -> float | None:
@@ -71,9 +77,18 @@ class App:
         self.agent_runner = agent_runner
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="job") if background else None
         self.public_url = cfg.server.get("public_url", f"http://{cfg.server.get('host')}:{cfg.server.get('port')}")
-        self.store.prune(int(cfg.server.get("retention_days", 90)))
+        self.prune()
         for d in self.store.recover_interrupted():
             log.error("delivery %s was mid-send at shutdown; marked unknown (not resent)", d[:8])
+
+    def prune(self) -> None:
+        """Drop everything older than [server] retention_days, and keep the log file bounded.
+        Runs at start-up and then daily."""
+        days = int(self.cfg.server.get("retention_days", 90))
+        self.store.prune(days)
+        self.llm_store.prune(days)
+        logfile.trim_own_log()          # launchd never rotates ~/Library/Logs/ring-router.log
+        self.pruned_at = time.time()
 
     def ctx(self, delivery_id: str, recorded_at: float | None = None) -> Context:
         return Context(cfg=self.cfg, notifier=self.notifier, store=self.store, fm=self.fm,
@@ -89,6 +104,8 @@ class App:
         recorded_at: when it was spoken (Unix s), if known. allow_late: the owner tapped "Run" on
         an old recording, so don't hold it again.
         """
+        if time.time() - self.pruned_at > 86400:
+            self.prune()
         ctx = self.ctx(delivery_id, recorded_at)
         ctx.trace("transcript", text=transcript)
         ctx.trace("cleaned", text=clean(transcript))
@@ -199,7 +216,7 @@ def make_handler(app: App):
                 return self._confirm(p)
             if activity_token and p.startswith("/activity/"):
                 parts = p.split("/")          # ['', 'activity', token, (delivery_id)]
-                if len(parts) >= 3 and hmac.compare_digest(parts[2], activity_token):
+                if len(parts) >= 3 and same(parts[2], activity_token):
                     base = f"/activity/{activity_token}"
                     if len(parts) == 3 or parts[3] == "":
                         page = activity.list_page(base, app.store.activity(100))
@@ -237,7 +254,7 @@ def make_handler(app: App):
             p = self.path.split("?", 1)[0]
             if p.startswith("/confirm/"):
                 return self._confirm(p)
-            if not path_token or not hmac.compare_digest(p.rstrip("/"), "/hook/" + path_token):
+            if not path_token or not same(p.rstrip("/"), "/hook/" + path_token):
                 return self.reply(404, "not found")
             if not secret:
                 log.error("no signing_secret configured; refusing")

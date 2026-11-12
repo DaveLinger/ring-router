@@ -152,6 +152,43 @@ def test_update_with_intent_and_create_without_any(cfg):
     assert results(spec) == [("update", "ok"), ("create", "ok")]
 
 
+def test_agent_stops_after_max_requests(cfg):
+    from pydantic_ai.exceptions import UsageLimitExceeded
+    cfg.raw.setdefault("agents", {})["max_requests"] = 3
+    mcp, executed = fake_macos()
+    model, _ = scripted(*[("calendar_events", {"action": "read"})] * 10)        # a model that never stops
+    with pytest.raises(UsageLimitExceeded):
+        run_agent("general", "What's on my calendar?", cfg, model=model, mcp_source=mcp)
+    assert len(executed) <= 3
+
+
+def test_runaway_agent_is_reported_not_silent(cfg, fake_fm):
+    cfg.raw.setdefault("agents", {})["max_requests"] = 2
+    ctx, _ = reroute_ctx(cfg, fake_fm, [("calendar_events", {"action": "read"})] * 10)
+    res = h_agent(route("What's on my calendar?", cfg), ctx, "general")
+    assert res.state == "failed" and ctx.notifier.sent[-1].title == "Not done"
+
+
+def test_agent_cost_and_usage_reach_the_activity_page(cfg, fake_fm, monkeypatch):
+    """The web searches an agent makes are paid calls too; their cost shows up with the delivery."""
+    from ringrouter.handlers import Context
+    from ringrouter.llm import OpenRouter, Reply
+    from ringrouter.notify import ConsoleNotifier
+    from ringrouter.store import Store
+    monkeypatch.setattr(OpenRouter, "chat", lambda self, model, messages, **kw: Reply("42", [], model, cost=0.0125))
+    mcp, _ = fake_macos()
+    model, _ = scripted(("web_search", {"query": "answer to everything"}), ("web_search", {"query": "again"}))
+    store = Store(":memory:")
+    store.set_state("d1", "received", transcript="what is the answer")
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=store, fm=fake_fm, delivery_id="d1",
+                  agent_runner=lambda kind, req, c, h, rr: run_agent(kind, req, c, history=h, model=model,
+                                                                     mcp_source=mcp, rerouter=rr))
+    h_agent(route("what is the answer", cfg), ctx, "general")
+    step = next(s for s in store.get_trace("d1") if s["phase"] == "agent")
+    assert step["data"]["cost"] == pytest.approx(0.025) and step["data"]["requests"] == 3
+    assert store.activity()[0]["cost"] == pytest.approx(0.025)
+
+
 def test_intent_gate_can_be_turned_off(cfg):
     cfg.raw.setdefault("agents", {})["require_write_intent"] = False
     mcp, executed = fake_macos()

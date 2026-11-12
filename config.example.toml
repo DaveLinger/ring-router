@@ -11,6 +11,7 @@ dry_run_routes = []         # routes kept in dry run even when dry_run = false
 state_dir = "~/Library/Application Support/ring-router"
 timestamp_window_s = 300
 max_recording_age_s = 300   # a message or home command spoken longer ago than this asks "Run it now?" (0 = off)
+retention_days = 90         # activity, traces, saved answers and conversations older than this are deleted
 
 [notify]
 provider = "console"        # "console" (log only) or "pushcut"
@@ -90,6 +91,7 @@ confirm_rerouted_messages = true   # a message the agent picks out of background
 confirm_rerouted_home = ["unlock", "open"]   # so do these home actions (said directly, they just run)
 require_write_intent = true   # the agent may update/delete only if your words asked for a change
 max_deletes = 1               # deletes the agent may make per request
+max_requests = 12             # model calls one request may use before the agent is stopped
 
 [research]
 web_results = 8

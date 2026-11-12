@@ -85,12 +85,12 @@ class Store:
         return [{"ts": ts, "phase": ph, "data": json.loads(d)} for ts, ph, d in rows]
 
     def activity(self, limit: int = 100) -> list[dict]:
-        """Recent deliveries with their model cost (sum of model_reply costs in the trace)."""
+        """Recent deliveries with their model cost (model replies plus agent runs, from the trace)."""
         with self.lock:
             rows = self.conn.execute(
                 "SELECT d.delivery_id, d.state, d.route, d.transcript, d.summary, d.first_seen, d.updated,"
                 " (SELECT SUM(json_extract(t.data, '$.cost')) FROM trace t"
-                "   WHERE t.delivery_id = d.delivery_id AND t.phase = 'model_reply') AS cost"
+                "   WHERE t.delivery_id = d.delivery_id AND t.phase IN ('model_reply', 'agent')) AS cost"
                 " FROM deliveries d ORDER BY d.first_seen DESC LIMIT ?", (limit,)).fetchall()
         keys = ("delivery_id", "state", "route", "transcript", "summary", "first_seen", "updated", "cost")
         return [dict(zip(keys, r)) for r in rows]
@@ -107,6 +107,7 @@ class Store:
         with self.lock:
             self.conn.execute("DELETE FROM trace WHERE ts < ?", (cutoff,))
             self.conn.execute("DELETE FROM deliveries WHERE updated < ?", (cutoff,))
+            self.conn.execute("DELETE FROM pending WHERE created < ?", (cutoff,))
 
     def recover_interrupted(self) -> list[str]:
         """A send in progress at shutdown has unknown status; never resend it."""

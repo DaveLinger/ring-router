@@ -237,6 +237,9 @@ landed on an agent that couldn't write. One agent with a shared conversation thr
 - **Follow-ups:** the agent keeps one conversation thread (10-minute window), passed as message history,
   so "Which of those is cheapest?" or "Why isn't the Tesla Model S Plaid on this list?" work naturally.
 - Instructions combine the spoken-transcript preamble, `profile.md`, `prompts.toml` and the current date/time.
+- **Limits and cost:** a run stops after `[agents] max_requests` (12) model calls, with a "Not done"
+  notification. What the run cost (the agent model plus its web searches, as OpenRouter reports it)
+  is recorded in the trace and counted in the activity page's per-command cost.
 - Default model: `anthropic/claude-sonnet-5.5` (`[agents] model`), about 2–5¢ per request.
 - **Instinct:** the agent can't message anyone. If it can't finish a request (e.g. it needs someone else's
   availability) it suggests a command, such as "ask Instinct to find a time for you and Terri".
