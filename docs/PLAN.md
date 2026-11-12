@@ -402,6 +402,17 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 
 ---
 
+### Parked ideas
+
+- **Cameras via HomeMCPBridge** ("What's at the front door?" → snapshot → vision model → Pushcut with
+  the image). `list_cameras` works (8 cameras at 7 Aztec Court), but upstream `capture_snapshot`
+  crashes on macOS Catalyst (`valueForUndefinedKey` on the HomeKit snapshot object). Getting image
+  data likely means rendering an `HMCameraView` and capturing it. Parked: separate from voice commands.
+- **HomeKit fan speed.** HomeKit turns the ceiling fans on and off, but RotationSpeed writes are
+  acknowledged and ignored by the Hubitat-bridged GE fan controllers. Hubitat stays enabled for fan
+  speeds until that's resolved.
+- **Send delay / iMessage Undo Send:** deferred (see Routing).
+
 ## Open questions and risks
 
 - [x] Tunnel: Tailscale Funnel at the Mac's ts.net address, proxying to localhost:8642; launchd keeps the listener up.
