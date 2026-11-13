@@ -68,8 +68,6 @@ traffic). Code-level review can't confirm these. Flag assumptions instead.
 
 ## Known gaps and parked ideas (don't spend time here unless asked)
 
-- **HomeKit fan speed:** RotationSpeed writes are acknowledged but ignored by the bridged fans, so
-  Hubitat stays on for fan speeds.
 - **Cameras:** HomeMCPBridge snapshots crash on Catalyst.
 - **Send delay / Undo Send:** deferred.
 - **Claude Code per host:** a stub (needs SSH to a VPS).

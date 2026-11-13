@@ -128,7 +128,7 @@ def test_homekit_down_does_not_break_hubitat(ctx, home):
 @pytest.mark.parametrize("say,control", [
     ("Set the office fan to low", {"name": "FAN-1", "action": "speed", "value": 33}),
     ("Set the office fan to medium", {"name": "FAN-1", "action": "speed", "value": 66}),
-    ("Set the office fan to high", {"name": "FAN-1", "action": "speed", "value": 100}),
+    ("Set the office fan to high", {"name": "FAN-1", "action": "speed", "value": 99}),
     ("Set the office fan to medium high", {"name": "FAN-1", "action": "speed", "value": 83}),
     ("Set the office fan to 40%", {"name": "FAN-1", "action": "speed", "value": 40}),
     ("Turn off the office fan", {"name": "FAN-1", "action": "off"}),

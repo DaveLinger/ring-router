@@ -28,7 +28,9 @@ HK_ACTIONS = {"on": "on", "off": "off", "lock": "lock", "unlock": "unlock", "ope
               "setLevel": "brightness", "setSpeed": "speed"}
 # HomeKit fans take a 0-100 rotation speed; spoken speed words map onto it (Hubitat snaps the
 # same words to its own low/medium/high).
-FAN_SPEED_PCT = {"low": 33, "medium-low": 50, "medium": 66, "medium-high": 83, "high": 100}
+# "high" is 99, not 100: Hubitat's HomeKit integration maps 100% to the speed "on" (keep the current
+# speed), so 100 never reaches high on Hubitat-bridged fans. Measured: <=33 low, 40-60 medium, 70-99 high.
+FAN_SPEED_PCT = {"low": 33, "medium-low": 50, "medium": 66, "medium-high": 83, "high": 99}
 
 
 def _norm(s: str) -> str:

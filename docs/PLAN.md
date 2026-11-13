@@ -325,11 +325,24 @@ Two backends behind one set of spoken names, combined into one catalog:
 - **Hubitat is an optional module** (`[hubitat] enabled`, off by default). When on, it handles every
   device it has (direct local HTTP via `/usr/bin/curl`, which macOS Local Network privacy lets through
   reliably under Ring Router.app). When off, HomeKit handles everything, including Hubitat's bridged devices.
-  On this install it stays on **only for fan speeds**: the patched HomeMCPBridge turns the ceiling fans
-  on and off, but the Hubitat-bridged GE fan controllers ignore HomeKit speed writes. Every Hubitat device
+  On this install it was kept on **only for fan speeds**; HomeKit now sets fan speeds too (see *Fan
+  speeds through HomeKit* below), so the Hubitat path can be retired. Every Hubitat device
   in use is in HomeKit, some under different names (Guest Bedroom Light/Fan = Guest Room Light/Fan;
   Master Bathroom Accessories = Master Bathroom Towel & Mirror Warmers); "Patio 2" is an unused relay
   output, excluded in `[hubitat] exclude`.
+- **Fan speeds through HomeKit** (measured 2026-11-12, all four GE fans). Hubitat's HomeKit
+  integration turns a RotationSpeed percentage into one of the driver's `supportedFanSpeeds`. Three
+  fans had that attribute empty, so the integration fell back to five speeds and sent "medium-low" /
+  "medium-high", which the GE driver rejects ("unsupported fan speed" in the hub log). Running
+  **Configure** on each fan in Hubitat filled it in (`low, medium, high, on, off`). Mapping: up to
+  33% low, 40-60% medium, 70-99% high, and **100% means "on"** (keep the current speed), so
+  ring-router sends 99 for "high". A write equal to the value HomeKit already holds can be dropped
+  (seen once), so a repeated speed may not reach the fan. A newly added fan needs Configure too.
+- **Retiring the Hubitat path** (`[hubitat] enabled = false`; the hub itself stays, it is the Z-Wave
+  radio that bridges these devices into HomeKit): first move `aliases` and `prefer` out of
+  `[hubitat]` (the combined catalog reads them from there today) into `[home]`, and add aliases for
+  the names that differ in HomeKit (above) so familiar phrases keep matching. Then HomeKit's copies
+  of the Hubitat devices are used (they are skipped only while Hubitat is on).
 - **HomeKit** (the superset) only for HomeKit-native devices. HomeKit entries whose manufacturer is
   "Hubitat" are bridged duplicates and are skipped.
 - **Never controlled:** anything named a detector, alarm or siren, and every label in
@@ -485,9 +498,6 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
   the image). `list_cameras` works (8 cameras at 7 Aztec Court), but upstream `capture_snapshot`
   crashes on macOS Catalyst (`valueForUndefinedKey` on the HomeKit snapshot object). Getting image
   data likely means rendering an `HMCameraView` and capturing it. Parked: separate from voice commands.
-- **HomeKit fan speed.** HomeKit turns the ceiling fans on and off, but RotationSpeed writes are
-  acknowledged and ignored by the Hubitat-bridged GE fan controllers. Hubitat stays enabled for fan
-  speeds until that's resolved.
 - **Send delay / iMessage Undo Send:** deferred (see Routing).
 
 ## Open questions and risks
