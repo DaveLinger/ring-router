@@ -22,6 +22,8 @@ from ..router import Route
 from .apple import (EVENT_SCHEMA, REMINDER_SCHEMA, applescript_note, default_end,  # noqa: F401
                     h_calendar, h_geo_reminder, h_list_add, h_note, h_reminder, h_remember, my_card_address,
                     parse_geo)
+from .claude_code import default_runner as claude_default_runner  # noqa: F401
+from .claude_code import h_claude_code, h_claude_proceed, run_proceed  # noqa: F401
 from .context import Context, Result
 from .home import (CMD_TO_ACTION, execute_home, get_hubitat, h_home, h_scene, home_status, read_back,  # noqa: F401
                    run_home)
@@ -32,11 +34,12 @@ from .models import AGENT_THREAD, _default_agent_runner, h_agent, h_llm, h_resea
 log = logging.getLogger(__name__)
 
 # Slow routes reply "accepted" to the Pebble app right away and finish in the background.
-SLOW_ROUTES = {"llm", "research", "agent", "claude_code"}
+SLOW_ROUTES = {"llm", "research", "agent", "claude_code", "claude_code_proceed"}
+SLOW_CONFIRMS = {"claude_code"}      # a Proceed tap that starts minutes of work answers right away
 # Routes that act on the world right away. A recording delivered long after it was spoken (the ring
 # was out of range, the phone was offline) asks first instead of running: holding the button meant
 # "now", not "whenever this arrives".
-LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "home", "scene"}
+LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "home", "scene", "claude_code_proceed"}
 
 
 def h_discard(r: Route, ctx: Context) -> Result:
@@ -78,7 +81,8 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
     "llm": h_llm,
     "research": h_research,
     "agent": lambda r, ctx: h_agent(r, ctx, "general"),
-    "claude_code": _stub("Claude Code"),
+    "claude_code": h_claude_code,
+    "claude_code_proceed": h_claude_proceed,
 }
 
 
@@ -101,4 +105,6 @@ def run_confirmed(kind: str, payload: dict, ctx: Context) -> Result:
         return send_imessage(payload, ctx)
     if kind == "home":
         return execute_home(ctx, payload)
+    if kind == "claude_code":
+        return run_proceed(payload, ctx)
     return Result("failed", f"unknown confirmation kind {kind}")

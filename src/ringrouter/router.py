@@ -4,7 +4,7 @@ Order:
   1. cancel phrase at the end        -> cancelled
   2. scene (exact whole phrase)      -> scene
   3. fixed prefix routes, most specific first
-       claude code on <host> / research / ask <model> / note / remember /
+       go ahead (Claude Code proposal) / claude code on <host> / research / ask <model> / note / remember /
        shopping list / reminder / calendar / home / messaging
   4. refusals (timers, alarms)       -> refuse
   5. anything else, question or not  -> agent (general agent)
@@ -61,7 +61,7 @@ def route(transcript: str, cfg) -> Route:
             return Route("scene", t, params={"scene": key}, reason="exact scene phrase")
 
     # 3. prefix routes ---------------------------------------------------------
-    for fn in (_claude_code, _research, _ask_model, _note, _remember, _shopping, _reminder,
+    for fn in (_go_ahead, _claude_code, _research, _ask_model, _note, _remember, _shopping, _reminder,
                _calendar, _home, _message, _home_suffix):
         r = fn(t, raw)
         if r:
@@ -80,8 +80,8 @@ def route(transcript: str, cfg) -> Route:
 
 # ------------------------------------------------------------------- helpers --
 
-CONTINUATION = re.compile(r"(?:oh(?![\w'])" + SEP + r"*)?(?:(?:and|also|plus|then)(?![\w'])" + SEP + r"*)+",
-                          re.IGNORECASE)
+CONTINUATION = re.compile(r"(?:oh(?![\w'])" + SEP + r"*)?(?:(?:and|also|plus|then|go\s+ahead\s+and)(?![\w'])"
+                          + SEP + r"*)+", re.IGNORECASE)
 
 
 def strip_continuation(t: str) -> str:
@@ -108,15 +108,39 @@ def _match_spoken(t: str, pos: int, section: dict) -> tuple[str, int] | None:
     return None
 
 
+ON_HOST = re.compile(r"(?:on|in|at)" + SEP + r"+(?:the" + SEP + r"+)?", re.IGNORECASE)
+# "Go ahead" / "do it" (the whole command): apply the fix Claude Code just proposed. The handler
+# refuses unless exactly one proposal is waiting, so on its own it can't do anything.
+GO_AHEAD = re.compile(r"(?:(?:yes|yeah|yep|sure)" + SEP + r"+)?(?:go\s+ahead|do\s+it|proceed|go\s+for\s+it|"
+                      r"make\s+the\s+(?:fix|change)|apply\s+(?:the|that)\s+fix|fix\s+it)"
+                      r"(?:\s+and\s+(?:fix|do|apply)\s+it)?(?:" + SEP + r"+please)?" + SEP + r"*$", re.IGNORECASE)
+
+
+def _go_ahead(t: str, raw: dict) -> Route | None:
+    if raw.get("hosts") and GO_AHEAD.fullmatch(t.strip()):
+        return Route("claude_code_proceed", t, reason="go-ahead for a Claude Code proposal")
+    return None
+
+
 def _claude_code(t: str, raw: dict) -> Route | None:
+    hosts = raw.get("hosts", {})
     m = match_prefix(t, ["ask claude code", "tell claude code", "hey claude code", "claude code"])
     if not m:
-        return None
+        # "Ask Claude on the home server why ...": naming a host means Claude Code there. Without a
+        # known host it stays "ask Claude" (the OpenRouter model).
+        names = dict.fromkeys(["claude", *raw.get("models", {}).get("claude", {}).get("spoken", [])])
+        v = match_prefix(t, [f"{verb} {n}" for verb in ("ask", "tell", "hey") for n in names])
+        on = v and ON_HOST.match(t, v[1])
+        hm = on and _match_spoken(t, on.end(), hosts)
+        if not hm:
+            return None
+        host, pos = hm
+        return Route("claude_code", t, body=strip_body(t[pos:]), verb=v[0].split()[0],
+                     params={"host": host}, reason="claude + named host")
     phrase, pos = m
     verb = phrase.split()[0] if phrase.split()[0] in ("ask", "tell", "hey") else "ask"
-    hosts = raw.get("hosts", {})
     host = next((k for k, h in hosts.items() if h.get("default")), None)
-    on = re.compile(r"(?:on|in|at)" + SEP + r"+(?:the" + SEP + r"+)?", re.IGNORECASE).match(t, pos)
+    on = ON_HOST.match(t, pos)
     if on:
         hm = _match_spoken(t, on.start(), hosts) or _match_spoken(t, on.end(), hosts)
         if not hm:
@@ -125,7 +149,7 @@ def _claude_code(t: str, raw: dict) -> Route | None:
                                               "message": f"Unknown Claude Code host '{heard}'."},
                          reason="claude code: host not in config")
         host, pos = hm
-    # "ask" and "tell" mean the same thing here: one mode, permissions set per host in config
+    # "ask" and "tell" mean the same thing here: the first run only investigates; changes need a go-ahead
     return Route("claude_code", t, body=strip_body(t[pos:]), verb=verb,
                  params={"host": host}, reason="claude code prefix")
 

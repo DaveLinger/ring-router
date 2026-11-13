@@ -217,6 +217,60 @@ say = "Ask Claude Code on the Synology why it's slow"
 route = "refuse"
 rule = "unknown_host"
 
+[[case]]
+say = "Ask Claude Code on the home server why the Plex server is down"
+route = "claude_code"
+host = "truenas"
+extracted = "why the Plex server is down"
+
+[[case]]
+say = "Ask Claude on the home server why Plex is down"
+route = "claude_code"
+host = "truenas"
+extracted = "why Plex is down"
+
+[[case]]
+say = "Ask Claude on the NAS how full the pool is"
+route = "claude_code"
+host = "truenas"
+
+[[case]]
+say = "Ask Claude on the old VPS why the websites are down"
+route = "claude_code"
+host = "racknerd"
+
+[[case]]
+say = "Ask Claude on VPS 2 whether nginx is running"
+route = "claude_code"
+host = "contabo"
+
+[[case]]
+say = "Ask Claude on the linger.dev VPS what's using the disk"
+route = "claude_code"
+host = "contabo"
+
+[[case]]
+say = "Ask Claude why the Plex server is down"
+route = "llm"
+model = "claude"
+
+[[case]]
+say = "Ask Claude on the weekend plans"
+route = "llm"
+model = "claude"
+
+[[case]]
+say = "Go ahead"
+route = "claude_code_proceed"
+
+[[case]]
+say = "Yes, go ahead and fix it."
+route = "claude_code_proceed"
+
+[[case]]
+say = "Go ahead and tell Terri I'm late"
+route = "imessage"
+
 # ---------------------------------------------------------------- research --
 [[case]]
 say = "Research the best robot vacuum under 500 dollars"

@@ -126,11 +126,16 @@ you and Terri.'"
 
 Reply in one to three sentences: the answer, or what you did. It is read as a phone notification."""
 
-[claude_code]   # DRAFT (Claude Code on the named host; "ask" and "tell" are the same)
-# Permissions come from the host's config (Claude Code's own allowed tools / permission mode),
-# not from the wording of the command.
+[claude_code]   # LIVE (Claude Code on the named host, read-only run; appended to its system prompt)
+# The first run can only look: Edit/Write are refused and Bash is limited to diagnostic commands
+# (READ_TOOLS in handlers/claude_code.py, or the host's read_tools). Changes need a go-ahead.
 text = """
-This request came from a voice command, possibly phrased as a question ('ask Claude Code why...') \
-or an instruction ('tell Claude Code to...'); treat both as the request. Investigate, and make \
-changes when the request calls for them. Finish with a summary of three sentences or fewer \
-suitable for a phone notification, then the details."""
+This request is a speech-to-text transcript from the owner's voice ring, relayed by ring-router, with the routing words ('ask Claude Code on <host>') removed. It may be phrased as a question or an instruction, and may contain misheard words. You are running non-interactively: nobody can answer questions mid-run, and in this run you can read files and run diagnostic commands but cannot change anything. Investigate and answer.
+Start with ONE sentence (under 200 characters) that works as a phone notification: what is wrong, or the answer. Then give the details.
+If fixing the problem, or doing what was asked, needs changes on this host, describe exactly what you would change and end with a final line of the form:
+PROPOSED FIX: <one sentence saying what you will do>
+The owner can then tell you to go ahead. Don't write that line if nothing needs changing."""
+
+[claude_code_proceed]   # LIVE (Claude Code, resuming the same session after "go ahead" / Proceed)
+text = """
+The owner has told you to go ahead with the fix you proposed earlier in this session. You may now make changes. Do only what that fix needs; don't widen it. Verify that it worked. Start your reply with ONE sentence (under 200 characters) for a phone notification: the outcome. Then list what you changed. You are non-interactive: if something unexpected comes up that needs the owner's decision, stop and explain instead of guessing."""

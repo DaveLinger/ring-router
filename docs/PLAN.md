@@ -209,8 +209,25 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 | **Scenes** | "Goodnight" (the entire transcript) | Fixed device actions |
 | **Research** | "Research the best robot vacuum under $500" / "Research with DeepSeek…" | A note in the "Research" folder; Pushcut just says it's ready |
 
-- **Claude Code:** hosts and spoken names are in config; unknown hosts are refused; default is the
-  Mac mini. "Ask" and "tell" mean the same thing; what Claude Code may do is set per host in config, not by wording.
+- **Claude Code** (`handlers/claude_code.py`): hosts and spoken names are in `[hosts]` (Mac mini, TrueNAS,
+  RackNerd VPS, Contabo VPS); an unknown host after "Claude Code on" is refused; the default is the Mac
+  mini. "Ask Claude on <known host>" is Claude Code too (a host makes the intent clear); "ask Claude …"
+  without one stays the OpenRouter model. Each request runs `claude -p --output-format json` locally or
+  over SSH (`bash -lc`, ring-router's own key with `IdentityAgent=none` so a background run never waits on
+  1Password). Remote Control sessions on those hosts were considered and rejected: they're interactive
+  sessions with no API a service can drive, may be busy or offline, and ring commands would land in the
+  middle of the owner's own conversations.
+  1. **Investigate, read-only:** `--permission-mode default` with a diagnostic allowlist (`READ_TOOLS`:
+     Read/Grep/Glob, `systemctl status`, `journalctl`, `docker ps/logs`, `curl -I`…) and Edit/Write
+     disallowed; unlisted tools are refused because nobody can be asked mid-run. The notification is
+     the first sentence plus **Full answer** (the answer page).
+  2. If changes are needed the answer ends `PROPOSED FIX: …`: the notification adds **Proceed**, and a
+     spoken "go ahead" / "do it" / "fix it" (the whole command) does the same, only while exactly that
+     one proposal is waiting (`[claude_code] followup_window_s`, 15 min).
+  3. **Proceed** resumes the same session (`--resume`) with `acceptEdits` and the host's `change_tools`;
+     a timeout there is `unknown`, never retried. `allow_changes = false` on a host means no Proceed.
+  Follow-ups to the same host within the window resume the session (read-only again).
+  A host that can't be reached yet has `not_ready = "why"` and answers "isn't set up yet".
 - **Shopping list:** on-device structured output splits items, so "mac and cheese" stays one item.
   If an item fails the rest are still tried, and the notification lists what was added and what
   wasn't; if Reminders stops answering, the remaining items are not tried.

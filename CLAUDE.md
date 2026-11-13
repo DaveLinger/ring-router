@@ -27,6 +27,7 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 | Vendored, patched `mcp-macos` and HomeMCPBridge (`vendor/patches/`) | iCloud-only calendars (a Google account is mirrored in by calsync), one HomeKit home, lookup by exact device id, Fan v2 support, HomeKit lock characteristics. |
 | Core is standard library only | Fewer moving parts on a headless box. `pydantic-ai` is imported only when the agent runs. |
 | `ask` vs `tell` | For messages: "ask" is rewritten into a direct question, "tell" is sent verbatim. For Claude Code and models they mean the same thing. |
+| Claude Code's first run can only look; changes need "go ahead" / Proceed | The command is a voice transcript; a misheard word shouldn't restart a server. The proceed run resumes the same session with the host's change tools. "Go ahead" acts only on the one proposal waiting (15 min). |
 | Timers and alarms are refused | No substitute is acceptable to the owner (no Pushcut timers, no phone Shortcuts). |
 
 ## Running and testing
@@ -71,7 +72,9 @@ traffic). Code-level review can't confirm these. Flag assumptions instead.
 
 - **Cameras:** HomeMCPBridge snapshots crash on Catalyst.
 - **Send delay / Undo Send:** deferred.
-- **Claude Code per host:** a stub (needs SSH to a VPS).
+- **Claude Code per host:** built (`handlers/claude_code.py`), but no host is reachable yet (`not_ready`
+  in the owner's config): needs the CLI on the Mac, ring-router's key (`~/.ssh/ring-router_ed25519`)
+  authorized on each server, and the VPS addresses.
 - `live_recipients` still limits real sends to the owner.
 
 ## What a useful review looks like

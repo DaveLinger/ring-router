@@ -104,7 +104,17 @@ default_model = "chatgpt"
 notes_folder = "Research"
 
 # --------------------------------------------------------------------- hosts --
-# Claude Code targets. ssh = "" means run locally.
+# Claude Code targets: "ask Claude Code on <host> ..." or "ask Claude on <host> ..." (naming a host
+# is what makes it Claude Code; "ask Claude ..." alone is the OpenRouter model). ssh = "" runs locally.
+# Per host, optional: claude (CLI path), read_tools / change_tools, allow_changes = false, model,
+# not_ready = "why" (answers "isn't set up yet: why" instead of trying).
+
+[claude_code]
+claude = "claude"                    # the CLI on each host (it must be logged in there)
+ssh_identity = ""                    # a dedicated key, e.g. "~/.ssh/ring-router_ed25519" (no agent prompts)
+timeout_s = 900                      # one run's limit
+max_turns = 30
+followup_window_s = 900              # follow-ups resume the session; Proceed / "go ahead" valid this long
 
 [hosts.mac_mini]
 display = "Mac mini"
@@ -113,10 +123,22 @@ ssh = ""
 workdir = "~"
 default = true
 
+[hosts.truenas]
+display = "TrueNAS"
+spoken = ["truenas", "true nas", "the nas", "nas", "the home server", "home server"]
+ssh = "truenas"
+workdir = "~"
+
 [hosts.racknerd]
 display = "RackNerd VPS"
-spoken = ["racknerd vps", "rack nerd vps", "racknerd", "rack nerd", "the vps", "vps"]
+spoken = ["racknerd vps", "rack nerd vps", "racknerd", "rack nerd", "old vps", "the old vps", "vps 1", "vps one", "vps1"]
 ssh = "racknerd"
+workdir = "~"
+
+[hosts.contabo]
+display = "Contabo VPS"
+spoken = ["contabo vps", "contabo", "new vps", "the new vps", "vps 2", "vps two", "vps2", "linger.dev vps", "linger dev vps"]
+ssh = "contabo"
 workdir = "~"
 
 # --------------------------------------------------------------------- lists --

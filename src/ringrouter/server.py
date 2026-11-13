@@ -157,6 +157,17 @@ class App:
         ctx.trace("result", state=res.state, summary=res.summary, background=True)
         log.info("delivery %s: (background) %s: %s", ctx.delivery_id[:8], res.state, res.summary)
 
+    def _confirmed_background(self, kind: str, payload: dict, ctx: Context) -> None:
+        try:
+            res = handlers.run_confirmed(kind, payload, ctx)
+        except Exception as e:
+            log.exception("confirmed %s failed", kind)
+            self.notifier.send(handlers.Notice("Error", f"{kind}: {e}"))
+            res = Result("failed", f"{kind} error: {e}", 422)
+        self.store.set_state(ctx.delivery_id, res.state, summary=res.summary)
+        ctx.trace("result", state=res.state, summary=res.summary, confirmed=True, background=True)
+        log.info("delivery %s: (confirmed, background) %s: %s", ctx.delivery_id[:8], res.state, res.summary)
+
     def answer_page(self, aid: str) -> str | None:
         a = self.llm_store.get_answer(aid)
         if not a:
@@ -199,6 +210,10 @@ class App:
                                 allow_late=True)
         ctx = self.ctx(did or f"confirm-{pid}")
         ctx.trace("confirmed", kind=kind)
+        if kind in handlers.SLOW_CONFIRMS and self.pool:      # minutes of work: answer the tap now
+            self.store.set_state(ctx.delivery_id, "accepted", summary=f"confirmed {kind}, running")
+            self.pool.submit(self._confirmed_background, kind, payload, ctx)
+            return 200, f"accepted: {kind}"
         try:
             res: Result = handlers.run_confirmed(kind, payload, ctx)
         except Exception as e:

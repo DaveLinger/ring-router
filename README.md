@@ -116,7 +116,9 @@ Three ideas hold it together:
 | *"Move my dentist appointment to next week"* | 🧠 The agent finds it and moves it |
 | *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 Web search; follow-ups keep the thread |
 | *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 The agent spots the buried command and hands it back, word for word |
-| *"Ask Claude Code on the RackNerd VPS why the websites are down"* | 🛠️ Claude Code on that host *(not built yet)* |
+| *"Ask Claude Code on the RackNerd VPS why the websites are down"* · *"Ask Claude on the home server why Plex is down"* | 🛠️ Claude Code on that host looks into it (read-only) and answers; naming a host is what makes "Claude" mean Claude Code |
+| *→ "Go ahead"* (or the **Proceed** button) | 🛠️ If it proposed a fix, the same session makes the change and reports back. Nothing waiting → refused |
+| *→ "Ask Claude on the home server what changed last night"* | 🛠️ Follow-ups within 15 minutes continue the same Claude Code session |
 | *"Set a timer for 10 minutes"* | 🚫 Refused: timers and alarms aren't supported |
 
 ---
@@ -384,10 +386,10 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | "Tell her…" follow-ups, leading "also/and" | ✅ Checked end to end through the live service (Terri sends are dry runs while `live_recipients` is only you) |
 | Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
 | Daily self-test | ✅ Installed; first run passed all eight checks |
-| Agent home tools | 🟡 Tried live: the agent found the right device and went through the home route for both a state question and a lock. Both failed at the HomeKit lock bug, since fixed; not re-run through the agent yet |
-| Lock and door read-back (`[home] read_back`) | 🟡 Tested with fakes; lock state reading verified on real Hubitat and HomeKit locks; not yet run end to end through the router |
+| Agent home tools | ✅ Live on the Laundry Room Door: "Is it locked?" (status), "get it locked" (runs), "unlock it" (held for a Send tap, then ran) |
+| Lock and door read-back (`[home] read_back`) | ✅ Live: "Laundry Room Door locked (confirmed)" / "unlocked (confirmed)" end to end (still off by default) |
 | HomeKit fan speeds, device and room nicknames | ✅ Live: low / medium / high verified on all four ceiling fans; "set the guest bedroom fan to high" etc. run end to end |
-| Claude Code per host | ⬜ Stub; needs SSH to the VPS |
+| Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | 🟡 Built and tested with a faked CLI; each host answers "isn't set up yet" until it's reachable: the CLI isn't installed on the Mac, ring-router's SSH key isn't on the servers, and the two VPS addresses aren't configured |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the
 roadmap. Notes for AI assistants working in this repo are in [CLAUDE.md](CLAUDE.md).
