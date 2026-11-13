@@ -76,8 +76,11 @@ def _words(s: str) -> list[str]:
 class Catalog:
     """Spoken-name matching over a device list (Hubitat, HomeKit, or both combined)."""
 
-    def __init__(self, *, aliases: dict | None = None, prefer: list[str] | None = None):
+    def __init__(self, *, aliases: dict | None = None, prefer: list[str] | None = None,
+                 room_aliases: dict | None = None):
         self.aliases = {k.lower(): v for k, v in (aliases or {}).items()}
+        # spoken room name -> the room's real name, anywhere in a phrase: "guest bedroom fan" -> "guest room fan"
+        self.room_aliases = {k.lower(): v.lower() for k, v in (room_aliases or {}).items()}
         # tie-breakers when a name matches several devices, e.g. ["ceiling fan"]: "fan" -> the ceiling fan
         self.prefer = [p.lower() for p in (prefer or [])]
 
@@ -175,11 +178,18 @@ def _match(self, target: str, action: str) -> Match:
         # "open the door" names no door, and the only thing that opens is the garage: ask, don't guess
         return Match(pool[:4], "ambiguous" if pool else "none", "which door?")
 
-    alias = self.aliases.get(re.sub(r"^(the|my)\s+", "", t))
-    if alias:
-        hits = [d for d in pool if d.label.lower() == alias.lower()]
-        if hits:
-            return Match(hits, "device", f"alias {t!r}")
+    def by_alias(phrase: str):
+        alias = self.aliases.get(re.sub(r"^(the|my)\s+", "", phrase))
+        hits = [d for d in pool if alias and d.label.lower() == alias.lower()]
+        return Match(hits, "device", f"alias {phrase!r}") if hits else None
+
+    if (m := by_alias(t)):
+        return m
+    for spoken in sorted(self.room_aliases, key=len, reverse=True):
+        t = re.sub(rf"\b{re.escape(spoken)}\b", self.room_aliases[spoken], t)
+    tw = _words(t)
+    if (m := by_alias(t)):
+        return m
 
     # "all the lights" / "the lights" / "everything"
     everything = tw == ["everything"]
@@ -204,7 +214,16 @@ def _match(self, target: str, action: str) -> Match:
                     if lights:
                         return Match(lights, "room", f"lights in {room}")
 
-    # word-overlap scoring
+    # word-overlap scoring. A spoken room keeps the search inside that room when anything there fits,
+    # so "the guest room ceiling fan" can't land on the living room's ceiling fan.
+    spoken_room = next((r for r in sorted(self.rooms(), key=len, reverse=True)
+                        if _words(r) and tw[:len(_words(r))] == _words(r)), None)
+    in_room = [d for d in pool if d.room == spoken_room] if spoken_room else []
+    m = _score(self, in_room, tw, target) if in_room else None
+    return m if m and m.kind != "none" else _score(self, pool, tw, target)
+
+
+def _score(self, pool: list, tw: list[str], target: str) -> Match:
     scored = []
     for d in pool:
         lw = set(_words(d.label)) | set(_words(d.room))

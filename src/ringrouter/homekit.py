@@ -108,8 +108,8 @@ class HomeKit:
 class Home(Catalog):
     """Hubitat + HomeKit as one catalog; commands go to each device's own backend."""
 
-    def __init__(self, hubitat=None, homekit=None, *, aliases=None, prefer=None):
-        super().__init__(aliases=aliases, prefer=prefer)
+    def __init__(self, hubitat=None, homekit=None, *, aliases=None, prefer=None, room_aliases=None):
+        super().__init__(aliases=aliases, prefer=prefer, room_aliases=room_aliases)
         self.hubitat, self.homekit = hubitat, homekit
         self.errors: list[str] = []
 

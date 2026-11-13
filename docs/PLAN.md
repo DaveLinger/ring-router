@@ -338,11 +338,15 @@ Two backends behind one set of spoken names, combined into one catalog:
   33% low, 40-60% medium, 70-99% high, and **100% means "on"** (keep the current speed), so
   ring-router sends 99 for "high". A write equal to the value HomeKit already holds can be dropped
   (seen once), so a repeated speed may not reach the fan. A newly added fan needs Configure too.
-- **Retiring the Hubitat path** (`[hubitat] enabled = false`; the hub itself stays, it is the Z-Wave
-  radio that bridges these devices into HomeKit): first move `aliases` and `prefer` out of
-  `[hubitat]` (the combined catalog reads them from there today) into `[home]`, and add aliases for
-  the names that differ in HomeKit (above) so familiar phrases keep matching. Then HomeKit's copies
-  of the Hubitat devices are used (they are skipped only while Hubitat is on).
+- **Hubitat path retired on this install** (2026-11-12, `[hubitat] enabled = false`; the hub stays,
+  it is the Z-Wave radio that bridges these devices into HomeKit). Names now live in `[home]`:
+  `aliases` (whole spoken target -> device label), `room_aliases` (spoken room -> HomeKit room,
+  anywhere in a phrase: "guest bedroom" -> Guest Room) and `prefer`. `[hubitat] aliases`/`prefer`
+  are still read for older configs. Renamed in HomeKit and aliased: Master Bathroom Accessories =
+  Master Bathroom Towel & Mirror Warmers; Furnace Fan Boost = Furnace Fan 2hr Hold. Side effects:
+  "outside lights" no longer includes Front Door Light (its HomeKit room is Front Door), "all
+  lights" now includes the virtual Garage Lights Hold, and Floor Lamp Basic counts as a Master
+  Bedroom light.
 - **HomeKit** (the superset) only for HomeKit-native devices. HomeKit entries whose manufacturer is
   "Hubitat" are bridged duplicates and are skipped.
 - **Never controlled:** anything named a detector, alarm or siren, and every label in
@@ -374,6 +378,8 @@ Two backends behind one set of spoken names, combined into one catalog:
 1. The router's verb gives the action (`turn on/off`, `set … to`, `dim`, `brighten`, `lock`, `unlock`).
    `set the fan to low` → `setSpeed low`; `dim the sconces to 20%` → `setLevel 20`.
 2. Candidates are narrowed by the capability the action needs: unlock considers only locks, fan speed only fans.
+   A spoken room name (after `room_aliases`) keeps the search inside that room whenever a device
+   there fits, so "the guest room ceiling fan" can't land on the living room's ceiling fan.
 3. The spoken target is matched: `[hubitat] aliases` → exact label → room + "lights"
    ("the living room lights" = every light in that room) → "all the lights" → word overlap.
 4. If several devices tie, `[hubitat] prefer` breaks it (`["ceiling fan"]`: "the living room fan" →

@@ -153,9 +153,7 @@ enabled = false             # optional module; HomeKit handles everything when o
 host = "192.168.1.10"          # hub's local IP
 app_id = "CHANGE-ME"           # Maker API app ID; token is RING_ROUTER_HUBITAT_TOKEN in .env
 exclude = []                  # same as [home] exclude (kept for older configs)
-# spoken nickname -> exact Hubitat device label (for names the matcher can't guess)
-aliases = { "back door" = "Back Door Lock" }
-prefer = ["ceiling fan"]       # tie-breaker when a name matches several devices
+# aliases / prefer here still work (older configs); [home] is the place for them now
 
 [homekit]
 # HomeMCPBridge (patched build, see vendor/patches/). HomeKit-native devices only: devices whose
@@ -171,6 +169,12 @@ confirm_actions = []
 # Device names never to control, on either backend. Anything named a detector, alarm or siren is
 # always left alone, and "turn off everything" skips outlets and plugs without listing them here.
 exclude = []
+# Spoken nickname -> exact device label, on either backend (for names the matcher can't guess, or a
+# device whose HomeKit name differs from what you say). The nickname is the whole spoken target.
+aliases = { "back door" = "Back Door Lock" }
+# Spoken room name -> the room's real name, anywhere in a phrase ("guest bedroom fan" -> Guest Room).
+room_aliases = { }
+prefer = ["ceiling fan"]       # tie-breaker when a name matches several devices
 # Read-back: after lock / unlock / open / close, ask the device what state it ended up in and say
 # so ("Front Door locked (confirmed)", or "was told to lock but reports unlocked"). Off by default:
 # it makes the command wait for the device (a garage door takes ~15 s) before it answers.

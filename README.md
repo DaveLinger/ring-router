@@ -354,7 +354,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Pushcut notifications and buttons | ✅ Send/Cancel and Full answer verified through the tunnel |
 | Ask a model, research notes: OpenRouter, web search, follow-ups, answer page | ✅ Live-tested with all four models; saving a research note waits on the Notes permission |
 | General agent: macOS tools, web search, follow-ups, `run_command`, write-intent gate | ✅ Live: read the real calendar, then moved an event as a follow-up |
-| Home: HomeKit via a patched HomeMCPBridge, Hubitat as an optional module | ✅ Live for lights, dimmers, fans, garage doors and locks |
+| Home: HomeKit via a patched HomeMCPBridge, Hubitat as an optional module | ✅ Live for lights, dimmers, fans (speeds included), garage doors and locks; this install runs HomeKit only |
 | HomeKit-only locks (e.g. Laundry Room Door) | ✅ Live: lock, unlock and lock state verified on the Laundry Room Door (the bridge patch now uses HomeKit's lock-mechanism characteristics) |
 | Tailscale Funnel limited to `/hook`, `/confirm`, `/answers`, `/health`; activity page tailnet-only | ✅ Live |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |

@@ -26,7 +26,7 @@ def get_hubitat(ctx: Context):
         return None
     key = (hub_ok, hc.get("host"), str(hc.get("app_id")), token, hk_ok, tuple(kc.get("command", [])),
            tuple(kc.get("homes", [])), tuple(hc.get("exclude", [])), tuple(kc.get("exclude", [])),
-           tuple(ctx.cfg.section("home").get("exclude", [])))
+           tuple(ctx.cfg.section("home").get("exclude", [])), repr(_names(ctx)))
     if _HUB is None or _HUB[0] != key:
         from ..homekit import Home, HomeKit  # noqa: PLC0415
         from ..hubitat import Hubitat  # noqa: PLC0415
@@ -37,11 +37,22 @@ def get_hubitat(ctx: Context):
         skip = kc.get("skip_manufacturers", ["Hubitat"]) if hub_ok else []
         hk = HomeKit(kc["command"], homes=kc.get("homes"), exclude_rooms=kc.get("exclude_rooms", []),
                      skip_manufacturers=skip, exclude=exclude) if hk_ok else None
-        _HUB = (key, Home(hub, hk, aliases=hc.get("aliases", {}), prefer=hc.get("prefer", [])))
+        aliases, prefer, room_aliases = _names(ctx)
+        _HUB = (key, Home(hub, hk, aliases=aliases, prefer=prefer, room_aliases=room_aliases))
     return _HUB[1]
 
 
 _HUB = None
+
+
+def _names(ctx: Context) -> tuple[dict, list, dict]:
+    """Spoken nicknames, tie-breakers and room nicknames for every backend: [home] aliases / prefer /
+    room_aliases. [hubitat] aliases / prefer are still read (older configs kept them there); [home]
+    wins on a clash."""
+    hc, home = ctx.cfg.section("hubitat"), ctx.cfg.section("home")
+    aliases = {**hc.get("aliases", {}), **home.get("aliases", {})}
+    prefer = list(home.get("prefer", [])) + [p for p in hc.get("prefer", []) if p not in home.get("prefer", [])]
+    return aliases, prefer, dict(home.get("room_aliases", {}))
 
 
 def run_home(ctx: Context, action: str, spoken: str, *, confirm: bool = False) -> Result:

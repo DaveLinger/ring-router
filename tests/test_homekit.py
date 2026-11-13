@@ -137,3 +137,43 @@ def test_homekit_fan_speeds(ctx, home, say, control):
     res = h_home(route(say, ctx.cfg), ctx)
     assert res.state == "done", res.summary
     assert home.bridge.controls == [control]
+
+
+def test_home_names_come_from_home_section_with_hubitat_fallback():
+    """[home] aliases/prefer apply to every backend; [hubitat] ones still count; [home] wins a clash."""
+    import types
+
+    from ringrouter.handlers.home import _names
+
+    sections = {"hubitat": {"aliases": {"old": "Old Label", "both": "Hubitat Label"}, "prefer": ["ceiling fan"]},
+                "home": {"aliases": {"both": "Home Label", "guest bedroom fan": "Guest Room Fan"}, "prefer": ["lamp"]}}
+    ctx = types.SimpleNamespace(cfg=types.SimpleNamespace(section=lambda n: sections.get(n, {})))
+    aliases, prefer, rooms = _names(ctx)
+    assert aliases == {"old": "Old Label", "both": "Home Label", "guest bedroom fan": "Guest Room Fan"}
+    assert prefer == ["lamp", "ceiling fan"]
+    assert rooms == {}
+
+
+def _guest_catalog():
+    from ringrouter.hubitat import Catalog, Device
+
+    class Fixed(Catalog):
+        def devices(self, refresh=False):
+            return [Device("1", "Guest Room Fan", "Guest Room", {"Switch", "FanControl"}, {}),
+                    Device("2", "Guest Room Light", "Guest Room", {"Switch"}, {}),
+                    Device("3", "Living Room Ceiling Fan", "Living Room", {"Switch", "FanControl"}, {}),
+                    Device("4", "Living Room Exhaust Fan", "Living Room", {"Switch"}, {})]
+    return Fixed(prefer=["ceiling fan"], room_aliases={"guest bedroom": "Guest Room"})
+
+
+@pytest.mark.parametrize("target,action,label", [
+    ("guest bedroom fan", "speed", "Guest Room Fan"),
+    ("the guest bedroom ceiling fan", "speed", "Guest Room Fan"),
+    ("guest room ceiling fan", "speed", "Guest Room Fan"),       # was the living room's ceiling fan
+    ("guest bedroom light", "on", "Guest Room Light"),
+    ("guest bedroom", "off", "Guest Room Light"),                # room -> its lights
+    ("living room fan", "speed", "Living Room Ceiling Fan"),
+])
+def test_room_aliases_and_spoken_room_scope(target, action, label):
+    m = _guest_catalog().match(target, action)
+    assert [d.label for d in m.devices] == [label], m
