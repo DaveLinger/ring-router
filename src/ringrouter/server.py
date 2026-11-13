@@ -1,4 +1,4 @@
-"""HTTP listener: POST /hook/<path_token>, GET|POST /confirm/<id>/<yes|no>, GET /health.
+"""HTTP listener: POST /hook/<path_token>, GET|POST /confirm/<id>/<yes|no|1-9>, GET /health.
 
 Status codes follow the Pebble app's retry behaviour:
   200  handled / dry run / duplicate / discarded / cancelled / refused / accepted (not retried)
@@ -157,9 +157,9 @@ class App:
         ctx.trace("result", state=res.state, summary=res.summary, background=True)
         log.info("delivery %s: (background) %s: %s", ctx.delivery_id[:8], res.state, res.summary)
 
-    def _confirmed_background(self, kind: str, payload: dict, ctx: Context) -> None:
+    def _confirmed_background(self, kind: str, payload: dict, ctx: Context, choice: int | None = None) -> None:
         try:
-            res = handlers.run_confirmed(kind, payload, ctx)
+            res = handlers.run_confirmed(kind, payload, ctx, choice)
         except Exception as e:
             log.exception("confirmed %s failed", kind)
             self.notifier.send(handlers.Notice("Error", f"{kind}: {e}"))
@@ -205,6 +205,7 @@ class App:
             close("cancelled", "confirmation expired")
             return 410, "expired or already handled"
         kind, payload = claimed
+        choice = int(answer) if answer.isdigit() else None     # "Which one?" buttons send 1, 2, 3...
         if kind == "late":      # an old recording the owner chose to run: back through the pipeline
             return self.process(payload["delivery_id"], payload["transcript"], payload.get("recorded_at"),
                                 allow_late=True)
@@ -212,10 +213,10 @@ class App:
         ctx.trace("confirmed", kind=kind)
         if kind in handlers.SLOW_CONFIRMS and self.pool:      # minutes of work: answer the tap now
             self.store.set_state(ctx.delivery_id, "accepted", summary=f"confirmed {kind}, running")
-            self.pool.submit(self._confirmed_background, kind, payload, ctx)
+            self.pool.submit(self._confirmed_background, kind, payload, ctx, choice)
             return 200, f"accepted: {kind}"
         try:
-            res: Result = handlers.run_confirmed(kind, payload, ctx)
+            res: Result = handlers.run_confirmed(kind, payload, ctx, choice)
         except Exception as e:
             log.exception("confirmed %s failed", kind)
             self.notifier.send(handlers.Notice("Error", f"{kind}: {e}"))
@@ -350,7 +351,7 @@ def make_handler(app: App):
 
         def _confirm(self, p: str):
             parts = p.strip("/").split("/")
-            if len(parts) != 3 or parts[2] not in ("yes", "no"):
+            if len(parts) != 3 or not (parts[2] in ("yes", "no") or parts[2] in "123456789" and len(parts[2]) == 1):
                 return self.reply(404, "not found")
             code, text = app.confirm(parts[1], parts[2])
             return self.reply(code, text)

@@ -361,7 +361,7 @@ def _message(t: str, raw: dict) -> Route | None:
         rm = _who(t, sm[1], recips)
         k = rm and match_prefix(t, ["a text message", "a message", "a text"], rm.end)
         if k:
-            return _message_route(t, rm, "tell", t[k[1]:])
+            return _message_route(t, rm, "tell", t[k[1]:], raw=raw)
     v = match_prefix(t, list(VERBS_ASK + VERBS_TELL))
     if v:
         verb, pos = v
@@ -372,7 +372,7 @@ def _message(t: str, raw: dict) -> Route | None:
             k = match_prefix(t, ["know that", "know"], rm.end)
             if not k:
                 return None
-            return _message_route(t, rm, "tell", t[k[1]:])
+            return _message_route(t, rm, "tell", t[k[1]:], raw=raw)
         rm = _who(t, pos, recips) if verb not in ("hey", "yo") else recipients.resolve(t, pos, recips)
         if rm is None:
             return None
@@ -381,10 +381,13 @@ def _message(t: str, raw: dict) -> Route | None:
         if verb == "ask" and rm.tier == "unknown":
             nxt = simple(t[rm.end:]).split(" ", 1)[0]
             if nxt in QUESTION_WORDS or nxt == "about":
-                return None   # "ask Google what time it is": a question for the agent, not a message
+                if not _contact_name(rm, raw):
+                    return None   # "ask Google what time it is": a question for the agent, not a message
+                # "ask Nate what time dinner is": a message if Nate is in Contacts, else the agent's
+                return _message_route(t, rm, "ask", t[rm.end:], raw=raw, fallback="agent")
         # "ask X ..." is indirect speech (rewrite); "hey X, ..." is direct address (send as spoken)
         kind = "ask" if verb == "ask" else "hey" if verb in VERBS_ASK else "tell"
-        return _message_route(t, rm, kind, t[rm.end:])
+        return _message_route(t, rm, kind, t[rm.end:], raw=raw)
     rm = recipients.resolve(t, 0, recips, bare_only=True)
     if rm:
         return _message_route(t, rm, "hey", t[rm.end:], bare=True)
@@ -396,22 +399,39 @@ def _is_question(s: str) -> bool:
     return w in QUESTION_WORDS or s.rstrip().endswith("?")
 
 
-def _message_route(t: str, rm, kind: str, rest: str, bare: bool = False) -> Route:
+def clean_body(rest: str, kind: str) -> str:
+    """The message text from what follows the name: "that ..." / "saying ..." / "to ..." trimmed."""
     body = strip_body(rest)
-    rewrite = "none"
     if kind == "ask":
-        rewrite = "ask_question"
-    elif kind == "hey":
-        body = capitalize_first(body)
-    else:
-        low = body.lower()
-        if low.startswith("that "):
-            body = body[5:]
-        elif low.startswith("saying "):
-            body = body[7:]
-        elif low.startswith("to "):
-            body = capitalize_first(body[3:])  # "tell terri to grab milk" -> "Grab milk"
-        body = capitalize_first(body)
+        return body
+    if kind == "hey":
+        return capitalize_first(body)
+    low = body.lower()
+    if low.startswith("that "):
+        body = body[5:]
+    elif low.startswith("saying "):
+        body = body[7:]
+    elif low.startswith("to "):
+        body = body[3:]                        # "tell terri to grab milk" -> "Grab milk"
+    return capitalize_first(body)
+
+
+def _contact_name(rm, raw: dict) -> bool:
+    """An unrecognized single name that Contacts and recent Messages may know ([messages] contacts)."""
+    return (rm.tier == "unknown" and bool(raw.get("messages", {}).get("contacts"))
+            and " " not in rm.heard and not rm.heard.endswith(("'s", "s'")))
+
+
+def _message_route(t: str, rm, kind: str, rest: str, bare: bool = False, raw: dict | None = None,
+                   fallback: str = "") -> Route:
+    body = clean_body(rest, kind)
+    rewrite = "ask_question" if kind == "ask" else "none"
+    if _contact_name(rm, raw or {}):           # the handler looks the name up; the router keeps no data
+        params = {"heard": rm.heard, "kind": kind, "rest": rest, "rewrite": rewrite}
+        if fallback:
+            params["fallback"] = fallback
+        return Route("imessage_contact", t, body=body, verb=kind, params=params,
+                     reason="message (name not configured: Contacts and recent Messages decide)")
     tier_route = {"strong": "imessage", "weak": "imessage", "unknown": "refuse", "pronoun": "imessage_followup"}[rm.tier]
     params = {"recipient": rm.key, "tier": rm.tier, "heard": rm.heard, "rewrite": rewrite}
     if rm.tier == "pronoun":

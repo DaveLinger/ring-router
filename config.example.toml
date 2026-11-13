@@ -194,6 +194,16 @@ geofence_radius_m = 100
 # "Tell her ..." / "let him know ..." means whoever you messaged last, for this long. A pronoun that
 # matches that recipient's `pronoun` sends; one that doesn't (or none set) asks with a Send tap.
 followup_window_s = 600
+# People not configured above: "tell Nate ..." looks the name up in Contacts and ranks the cards by
+# your recent 1:1 Messages (needs Full Disk Access for Ring Router.app). Sends without asking when
+# exactly one card matches someone you messaged in the last `recent_days` and no one else you
+# messaged that recently sounds like it, or when a spoken first + last name matches exactly one card.
+# Anything less asks with a Send tap per person (up to max_choices). No card: refused.
+# Only message metadata is read (who, when, which service), never message text.
+contacts = true
+recent_days = 7
+max_choices = 3
+history_days = 365          # how far back "last messaged" looks
 
 # ----------------------------------------------------------------- calendars --
 

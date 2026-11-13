@@ -45,3 +45,10 @@ def cfg(monkeypatch):
 @pytest.fixture
 def fake_fm():
     return FakeFM()
+
+
+@pytest.fixture(autouse=True)
+def no_real_contacts(monkeypatch):
+    """Tests never read this Mac's Contacts or Messages: the default people loader finds nobody."""
+    import ringrouter.handlers as h
+    monkeypatch.setattr(h, "default_people_loader", lambda ctx: (lambda: []))

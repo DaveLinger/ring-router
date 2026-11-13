@@ -73,5 +73,20 @@ def soundex(word: str) -> str:
     return (out + "000")[:4]
 
 
+def sound_key(word: str) -> str:
+    """Soundex with the first letter coded by sound too, so spellings of one sound share a key:
+    Erin/Aaron, Sean/Shawn, Geoff/Jeff, Kris/Chris, Phil/Fil. Vowels are ignored, so it over-matches
+    (Tom/Tim): use it where a match only adds caution, never where it picks a recipient."""
+    w = re.sub(r"[^a-z]", "", word.lower())
+    w = re.sub(r"^ph", "f", w)
+    w = re.sub(r"^(kn|gn|wr)", lambda m: m.group(0)[1], w)       # silent first letter: Knox, Wright
+    s = soundex(w)
+    if not s:
+        return ""
+    first = {**dict.fromkeys("bfpv", "1"), **dict.fromkeys("cgjkqsxz", "2"), **dict.fromkeys("dt", "3"),
+             "l": "4", **dict.fromkeys("mn", "5"), "r": "6"}.get(w[0], "0")
+    return first + s[1:]
+
+
 def capitalize_first(s: str) -> str:
     return s[:1].upper() + s[1:] if s else s

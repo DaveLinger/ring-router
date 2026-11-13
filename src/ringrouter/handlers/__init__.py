@@ -27,8 +27,8 @@ from .claude_code import h_claude_code, h_claude_proceed, run_proceed  # noqa: F
 from .context import Context, Result
 from .home import (CMD_TO_ACTION, execute_home, get_hubitat, h_home, h_scene, home_status, read_back,  # noqa: F401
                    run_home)
-from .messages import (compose_imessage, h_imessage, h_imessage_followup, parse_contacts,  # noqa: F401
-                       recipient_pronoun, resolve_handle, send_imessage)
+from .messages import (compose_imessage, default_people_loader, h_imessage, h_imessage_contact,  # noqa: F401
+                       h_imessage_followup, parse_contacts, recipient_pronoun, resolve_handle, send_imessage)
 from .models import AGENT_THREAD, _default_agent_runner, h_agent, h_llm, h_research, system_prompt  # noqa: F401
 
 log = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ SLOW_CONFIRMS = {"claude_code"}      # a Proceed tap that starts minutes of work
 # Routes that act on the world right away. A recording delivered long after it was spoken (the ring
 # was out of range, the phone was offline) asks first instead of running: holding the button meant
 # "now", not "whenever this arrives".
-LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "home", "scene", "claude_code_proceed"}
+LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "imessage_contact", "home", "scene", "claude_code_proceed"}
 
 
 # [modules]: each feature can be switched off. A route belongs to the module(s) it needs; research
@@ -48,7 +48,7 @@ LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "home", "scene", "claude
 MODULES = {"messages": "Messages", "notes": "Notes", "reminders": "Reminders", "calendar": "Calendar",
            "home": "Home control", "models": "Asking models", "agent": "The general agent",
            "claude_code": "Claude Code"}
-ROUTE_MODULES = {"imessage": ("messages",), "imessage_followup": ("messages",), "note": ("notes",),
+ROUTE_MODULES = {"imessage": ("messages",), "imessage_followup": ("messages",), "imessage_contact": ("messages",), "note": ("notes",),
                  "remember": ("notes",), "list_add": ("reminders",), "reminder": ("reminders",),
                  "calendar": ("calendar",), "home": ("home",), "scene": ("home",), "llm": ("models",),
                  "research": ("models", "notes"), "agent": ("agent",), "claude_code": ("claude_code",),
@@ -89,6 +89,7 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
     "refuse": h_refuse,
     "imessage": h_imessage,
     "imessage_followup": h_imessage_followup,
+    "imessage_contact": h_imessage_contact,
     "note": h_note,
     "remember": h_remember,
     "list_add": h_list_add,
@@ -122,7 +123,11 @@ def run(r: Route, ctx: Context) -> Result:
         return Result("failed", f"{r.route} error: {e}", 422)
 
 
-def run_confirmed(kind: str, payload: dict, ctx: Context) -> Result:
+def run_confirmed(kind: str, payload: dict, ctx: Context, choice: int | None = None) -> Result:
+    if "choices" in payload:            # "Which one?": the tapped button picks the recipient
+        if choice is None or not 1 <= choice <= len(payload["choices"]):
+            return Result("refused", "no recipient chosen, nothing sent", 400)
+        payload = {k: v for k, v in payload.items() if k != "choices"} | payload["choices"][choice - 1]
     if kind == "imessage":
         return send_imessage(payload, ctx)
     if kind == "home":

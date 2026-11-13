@@ -44,6 +44,7 @@ class Context:
     hubitat_factory: Callable = field(default=None)  # (ctx) -> Hubitat | None
     address_lookup: Callable = field(default=None)   # (label="home") -> address on the Contacts My Card
     claude_runner: Callable = field(default=None)    # (argv, cwd, timeout_s) -> CompletedProcess
+    people_loader: Callable = field(default=None)    # () -> [people.Person]: Contacts + recent Messages
 
     def __post_init__(self):
         if self.mcp_call is None:
@@ -65,6 +66,8 @@ class Context:
             self.address_lookup = h.my_card_address
         if self.claude_runner is None:
             self.claude_runner = h.claude_default_runner
+        if self.people_loader is None:
+            self.people_loader = h.default_people_loader(self)
         # Tracing wrappers: every side effect and model call lands in the activity trace.
         self.mcp_call = _traced_mcp(self, self.mcp_call)
         self.notes_writer = _traced_notes(self, self.notes_writer)

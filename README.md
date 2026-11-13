@@ -124,7 +124,7 @@ In practice:
 
 | | |
 | --- | --- |
-| 🎙️ **Push-to-talk means intent** | The ring only listens while you hold the button, so what you say runs, including "unlock the front door". Confirmations are opt-in per action. The built-in check is about *who*, not *what*: messages only go to people on your allowlist. |
+| 🎙️ **Push-to-talk means intent** | The ring only listens while you hold the button, so what you say runs, including "unlock the front door". Confirmations are opt-in per action. The built-in check is about *who*, not *what*: a message goes without a tap only to someone it's clearly meant for (your configured people, or a Contacts card you've messaged lately). |
 | 🧮 **Code decides, models assist** | Routing, recipients, device matching and dates are deterministic code with an answer key ([`tests/phrases.toml`](tests/phrases.toml)). Apple's on-device model does the small language jobs: turning *"ask Terri when she'll be home"* into *"When will you be home?"*, titling notes, splitting shopping lists. |
 | 🧾 **Every command leaves a receipt** | A notification says exactly what was sent or changed, and the activity page shows each step: what was heard, how it routed, what each model said, what was sent to macOS or the house. |
 
@@ -141,7 +141,10 @@ In practice:
 | *"Hey Terri, dinner's ready"* · *"Send Terri a text saying I'm late"* | 💬 Sent as spoken: **"Dinner's ready"** · **"I'm late"** |
 | *"Tell the guys let's hang out tomorrow."* | 💬 Posts to the group chat |
 | *"Tell Sherry I'm on my way"* | ❓ Close to "Terri": asks **Send / Cancel** first |
-| *"Tell Harry…"* · *"Tell Terri's mom…"* | 🚫 Not on the allowlist, nothing sent |
+| *"Tell Nate the bottle came in"* | 💬 Not configured, but Nate Bowman is the only Nate you've texted this week: sent to him |
+| *"Tell Frank I say hi"* | ❓ One Frank in Contacts, not messaged in a year: **Send / Cancel** first (*"Tell Frank Schwartz…"* sends) |
+| *"Tell Nate…"* with two recent Nates | ❓ **Which one?** a button per person |
+| *"Tell Zebulon…"* · *"Tell Terri's mom…"* | 🚫 Nobody by that name, nothing sent |
 | *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
 | *"Tell Terri I'm on my way"* → *"Also tell her I'll grab dinner"* | 💬 "Her" = whoever you messaged in the last 10 minutes, if that recipient's `pronoun` fits; otherwise a **Send / Cancel** tap |
 
@@ -198,7 +201,15 @@ In practice:
 <details open>
 <summary><b>Who gets a message</b></summary>
 
-- **Allowlist only.** Messages go to the people and chats in your config, nobody else.
+- **Your people, then Contacts.** The people and chats in your config come first. With
+  `[messages] contacts = true`, any other name is looked up in Contacts and ranked by your recent
+  one-to-one Messages (`people.py`; needs Full Disk Access for Ring Router.app; only who/when/which
+  service is read, never message text). It sends without a tap only when exactly one card with that
+  first name (or nickname: Nate = Nathan) is someone *you* wrote to in the last 7 days and nobody else
+  that recent sounds alike (Nate/Kate), or when you say a first + last name that matches one card.
+  Otherwise: one **Send** button per candidate (up to 3), or refused if no card matches. It goes to
+  the number or address of the conversation you last wrote in. "Ask Google what…" with no Google in
+  Contacts goes to the agent. `live_recipients` keeps Contacts matches in dry run unless it lists `"contacts"`.
 - **Near misses ask.** A name spelled *and* sounding like one of yours ("Sherry", "Jerry" for Terri)
   gets a **Send / Cancel** tap. "Troy", "Terri's mom" and "the guy at the door" are refused.
 - **No guessing at numbers.** The number is the `handle` in your config, or the one Contacts card
@@ -475,7 +486,8 @@ ring-router/
 │   ├── server.py      # HTTP listener, status codes, background jobs, confirmations
 │   ├── protocol.py    # Pebble webhook v1: verify, parse, and build (for the simulator)
 │   ├── router.py      # transcript → Route (pure function of text + config)
-│   ├── recipients.py  # allowlist matching: strong / weak / unknown
+│   ├── recipients.py  # configured-recipient matching: strong / weak / unknown
+│   ├── people.py      # Contacts + recent Messages: who an unconfigured name means
 │   ├── cancel.py      # trailing cancel-phrase detection
 │   ├── when.py        # dates and times worked out from the spoken words (pure functions)
 │   ├── handlers/      # one handler per route; dry run enforced here

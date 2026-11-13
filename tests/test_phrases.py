@@ -6,7 +6,7 @@ import pytest
 from ringrouter.router import route
 
 CASES = tomllib.loads((Path(__file__).parent / "phrases.toml").read_text())["case"]
-CHECKED = ("recipient", "tier", "rewrite", "verb", "model", "host", "list", "scene", "rule",
+CHECKED = ("recipient", "tier", "heard", "kind", "fallback", "rewrite", "verb", "model", "host", "list", "scene", "rule",
            "action", "confirm", "location_trigger", "pronoun")
 
 

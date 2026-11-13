@@ -63,9 +63,9 @@ tier = "weak"
 
 [[case]]
 say = "Tell Harry I'm on my way"
-route = "refuse"
-tier = "unknown"
-rule = "unknown_recipient"
+route = "imessage_contact"       # not configured: Contacts + recent Messages decide (never Terri)
+heard = "harry"
+extracted = "I'm on my way"
 
 [[case]]
 say = "Tell the kids dinner's ready"
@@ -638,13 +638,13 @@ tier = "weak"
 
 [[case]]
 say = "Tell Troy I'm on my way"
-route = "refuse"
-rule = "unknown_recipient"
+route = "imessage_contact"       # not a near-miss of Terri
+heard = "troy"
 
 [[case]]
 say = "Tell Tara hello"
-route = "refuse"
-rule = "unknown_recipient"
+route = "imessage_contact"
+heard = "tara"
 
 [[case]]
 say = "Tell Terri's mom I said hi"
@@ -663,7 +663,8 @@ rule = "unknown_recipient"
 
 [[case]]
 say = "Ask Google what time it is"
-route = "agent"
+route = "imessage_contact"       # nobody named Google in Contacts -> the handler hands it to the agent
+fallback = "agent"
 
 [[case]]
 say = "Ask around about a plumber"
@@ -671,8 +672,8 @@ route = "agent"
 
 [[case]]
 say = "Ask mom to call me"
-route = "refuse"
-rule = "unknown_recipient"
+route = "imessage_contact"       # a card with nickname "Mom" would match
+heard = "mom"
 
 [[case]]
 say = "Instinct tells me this is a bad idea"
@@ -769,3 +770,46 @@ location_trigger = false
 say = "Remind me to finish the report when I get to it"
 route = "reminder"
 location_trigger = false
+
+# ------------------------------------------- people found in Contacts ([messages] contacts) --
+# Routing only: who it goes to is decided by the handler (tests/test_contacts.py).
+[[case]]
+say = "Tell Nate I'm excited for the new jack daniels bottle release today"
+route = "imessage_contact"
+heard = "nate"
+kind = "tell"
+extracted = "I'm excited for the new jack daniels bottle release today"
+
+[[case]]
+say = "Tell Frank I say hi"
+route = "imessage_contact"
+heard = "frank"
+extracted = "I say hi"
+
+[[case]]
+say = "Ask Nate what time we're meeting"
+route = "imessage_contact"
+heard = "nate"
+rewrite = "ask_question"
+fallback = "agent"
+extracted = "what time we're meeting"
+
+[[case]]
+say = "Text Nate that I'm running late"
+route = "imessage_contact"
+heard = "nate"
+extracted = "I'm running late"
+
+[[case]]
+say = "Let Nate know the bottle came in"
+route = "imessage_contact"
+heard = "nate"
+
+[[case]]
+say = "Hey Nate are you around"
+route = "agent"                  # "hey <unknown>" is just talk, as before
+
+[[case]]
+say = "Tell the plumber I'll be home at noon"
+route = "refuse"                 # "the ..." is never a Contacts lookup
+rule = "unknown_recipient"

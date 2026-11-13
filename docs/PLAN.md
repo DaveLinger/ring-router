@@ -22,7 +22,7 @@ model. Answers and confirmations come back as **Pushcut** notifications.
 
 - Common commands ("tell Terri I'm on my way") run with **no cloud LLM** in the path: fast, cheap, predictable.
 - Anything that doesn't match a prefix goes to a **general agent** with the macOS tools.
-- Messages only go to **allowlisted** people and chats; a near-miss name needs a confirmation.
+- Messages go to configured people and chats, or to a Contacts card only on a clear recent or full-name match; anything less needs a confirmation.
 - **Push-to-talk means intent:** the ring only listens while the button is held, so commands run as
   spoken, including unlock and garage-open. Confirm-first is opt-in per action (`[home] confirm_actions`).
 - Both home automation paths, **Hubitat** and **HomeKit**, can be tested side by side.
@@ -151,8 +151,9 @@ revisit if real use shows a need.
 | --- | --- | --- |
 | 1. Allowlisted, strong match | "tell terri…", "tell terry…" | Send, then a receipt notification |
 | 2. Allowlisted, weak match | "tell sherry…" | Pushcut confirmation: **Send / Cancel** |
-| 3. Not allowlisted | "tell harry…" | Never sent: "Didn't recognize 'harry', nothing sent." |
-| 3b. *(later)* LLM guess | "tell harry…" | Suggests who you meant from message recency; you confirm |
+| 3a. Contacts, clear | "tell nate…" (the one Nate/Nathan you wrote to in 7 days, no recent sound-alike) · "tell frank schwartz…" (exact full name, one card) | Send ([messages] contacts) |
+| 3b. Contacts, unclear | several matches · only a sound-alike · only someone not messaged in 7 days | **Send** button per person (max 3) |
+| 3c. Nobody | "tell zebulon…" | Never sent: "Didn't recognize…". "Ask X what…" goes to the agent instead |
 | Pronoun follow-up | "tell her…", "let him know…", "ask them…" | The last recipient within `[messages] followup_window_s` (600 s): sends if the pronoun fits their `pronoun` (a group chat is "them"), else **Send / Cancel**; nobody recent → refused |
 
 **Pronoun follow-ups** ("Tell Terri I'm on my way" → "Also tell her I'll grab dinner"). The router keeps
@@ -527,7 +528,7 @@ Anyone who could fake this webhook could text your contacts or unlock your door.
 | Reminders, Calendars (Full Access), Contacts | macos-mcp EventKit tools, location helper | ✅ granted to Ring Router |
 | Local Network | Hubitat Maker API on the LAN | ✅ granted to Ring Router |
 | HomeKit | HomeMCPBridge (via Ring Router) | ✅ granted |
-| Full Disk Access | Reading Messages (general agent, tier 3b) | later, optional |
+| Full Disk Access | Reading chat.db / AddressBook for Contacts matching (tiers 3a-3c) | ✅ granted to Ring Router (2026-11-13) |
 
 ---
 
