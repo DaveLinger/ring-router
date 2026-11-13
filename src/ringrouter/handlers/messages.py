@@ -12,6 +12,39 @@ from .context import Context, Result
 
 log = logging.getLogger(__name__)
 
+LAST_RECIPIENT = "last_message_recipient"     # kv key: who "her" / "him" / "them" means
+PRONOUN_FORMS = {"she": "her", "her": "her", "he": "him", "him": "him", "they": "them", "them": "them"}
+
+
+def recipient_pronoun(rc: dict) -> str | None:
+    """'her' / 'him' / 'them' for a recipient: its `pronoun` setting; a group chat is 'them'."""
+    p = PRONOUN_FORMS.get(str(rc.get("pronoun", "")).lower().split("/")[0].strip())
+    return p or ("them" if rc.get("chat_id") else None)
+
+
+def h_imessage_followup(r: Route, ctx: Context) -> Result:
+    """"Tell her I'll grab dinner" right after messaging Terri: 'her' is whoever was messaged last,
+    within [messages] followup_window_s. Sends straight away when the pronoun fits that recipient's
+    `pronoun`; asks with a Send tap when it doesn't (or none is set). Never guesses past the window."""
+    said = r.params["pronoun"]
+    window = int(ctx.cfg.section("messages").get("followup_window_s", 600))
+    key = ctx.store.get_kv(LAST_RECIPIENT, window)
+    recips = ctx.cfg.raw.get("recipients", {})
+    if not key or key not in recips:
+        msg = (f"Who's “{said}”? You haven't messaged anyone in the last {window // 60} minutes. "
+               f"Nothing sent. Say the name, e.g. “tell Terri …”.")
+        ctx.notify("Not sent", msg)
+        return Result("refused", f"no recent recipient for {said!r}")
+    rc = recips[key]
+    fits = recipient_pronoun(rc) == said
+    ctx.trace("pronoun", said=said, recipient=rc.get("display", key), fits=fits,
+              recipient_pronoun=recipient_pronoun(rc) or "unset")
+    rerouted = r.params.get("tier") == "weak"                  # the agent dug it out of noise: always ask
+    params = {**r.params, "recipient": key, "tier": "strong" if fits and not rerouted else "weak",
+              "heard": r.params.get("heard") or said}
+    return h_imessage(Route("imessage", r.transcript, body=r.body, verb=r.verb, params=params,
+                            reason=f"{said!r} = last recipient {key}"), ctx)
+
 
 def compose_imessage(r: Route, ctx: Context) -> tuple[str, bool]:
     """The exact text that will be sent, and whether the on-device rewrite was used."""
@@ -56,6 +89,7 @@ def send_imessage(payload: dict, ctx: Context, rewrote: bool = False) -> Result:
     live_only = ctx.cfg.server.get("live_recipients")   # testing safety: only these get real sends
     if ctx.dry("imessage") or (live_only is not None and payload["recipient"] not in live_only):
         ctx.notify("Dry run", f"Would send to {display}{note}: “{text}”")
+        ctx.store.set_kv(LAST_RECIPIENT, payload["recipient"])     # "tell her..." follows a dry run too
         return Result("dry_run", f"DRY RUN: would send to {display}{note}: {text!r}")
     args = {"action": "create", "text": text}
     if rc.get("chat_id"):
@@ -70,11 +104,13 @@ def send_imessage(payload: dict, ctx: Context, rewrote: bool = False) -> Result:
     try:
         ctx.mcp_call("messages_chat", args)
     except TimeoutError:
+        ctx.store.set_kv(LAST_RECIPIENT, payload["recipient"])     # it may well have gone; "tell her" still means them
         ctx.notify("Send status unknown", f"To {display}: “{text}”. Check Messages; not retrying.")
         return Result("unknown", "send timed out; status unknown, will not resend", 422)
     except Exception as e:
         ctx.notify("Not sent", f"To {display}: {e}")
         return Result("failed", f"send failed: {e}", 422)
+    ctx.store.set_kv(LAST_RECIPIENT, payload["recipient"])
     ctx.notify(f"Sent to {display}", f"“{text}”{note}")
     return Result("done", f"sent to {display}: {text!r}")
 

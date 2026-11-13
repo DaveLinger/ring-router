@@ -7,7 +7,7 @@ from ringrouter.router import route
 
 CASES = tomllib.loads((Path(__file__).parent / "phrases.toml").read_text())["case"]
 CHECKED = ("recipient", "tier", "rewrite", "verb", "model", "host", "list", "scene", "rule",
-           "action", "confirm", "location_trigger")
+           "action", "confirm", "location_trigger", "pronoun")
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["say"] for c in CASES])

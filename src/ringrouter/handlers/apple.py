@@ -8,7 +8,7 @@ import re
 import subprocess
 from datetime import datetime
 
-from .. import when
+from .. import places, when
 from ..config import PROJECT_DIR
 from ..prompts import prompt
 from ..router import Route
@@ -127,74 +127,82 @@ MY_CARD_SCRIPT = """tell application "Contacts"
   return out
 end tell"""
 
-GEO_PATTERNS = [  # (regex on the reminder text, place, proximity)
-    (r"\bwhen i (?:get|arrive|come|am|'m)\s+(?:back\s+)?home\b|\bwhen i get back\b|\bwhen i arrive\b", "home", "enter"),
-    (r"\bwhen i (?:leave|head out|walk out)(?:\s+(?:the\s+|my\s+)?(?:home|house))?\b", "home", "leave"),
-]
-# What follows the trigger when it is about somewhere else: "when I leave work", "when I arrive at
-# the office", "when I get back from vacation". Home is the only place there is a geofence for.
-ELSEWHERE = (r"\s+(?:from\b|at\b|in\b|here\b|there\b|work\b|school\b|town\b|church\b|campus\b"
-             r"|to\s+(?:the|my|a|an|work|school|town|church|campus)\b|(?:the|my|a|an)\s+\w)")
-
-
-def my_card_address() -> str:
-    """Home address from the Contacts 'My Card' (label 'home' preferred). Read fresh every time."""
+def my_card_address(label: str = "home") -> str:
+    """An address from the Contacts 'My Card', read fresh every time. For "home" a home-labelled
+    address is preferred and any address will do; any other label must exist on the card."""
     out = subprocess.run(["/usr/bin/osascript", "-e", MY_CARD_SCRIPT], capture_output=True, text=True,
                          timeout=30, check=True).stdout
     rows = [line.split("|") for line in out.splitlines() if line.count("|") == 4]
     if not rows:
         raise RuntimeError("no address on your My Card in Contacts")
-    rows.sort(key=lambda r: 0 if "home" in r[0].lower() else 1)
-    label, street, city, state, zip_ = (x.strip() for x in rows[0])
+    want = label.lower()
+    if want != "home":
+        rows = [r for r in rows if want in r[0].lower()]
+        if not rows:
+            raise RuntimeError(f"no {label!r} address on your My Card in Contacts")
+    rows.sort(key=lambda r: 0 if want in r[0].lower() else 1)
+    _label, street, city, state, zip_ = (x.strip() for x in rows[0])
     return ", ".join(p for p in (street, city, f"{state} {zip_}".strip()) if p and p != "missing value")
 
 
-def parse_geo(body: str) -> tuple[str, str, str] | None:
-    """'when I get home to take out the trash' -> ('Take out the trash', 'home', 'enter')."""
-    for pat, place, prox in GEO_PATTERNS:
-        m = re.search(pat, body, re.IGNORECASE)
-        if m:
-            said_home = re.search(r"\b(home|house)$", m.group(0), re.IGNORECASE)
-            if not said_home and re.match(ELSEWHERE, body[m.end():], re.IGNORECASE):
-                return None
-            title = " ".join((body[:m.start()] + " " + body[m.end():]).split()).strip(" ,.")
-            title = re.sub(r"^(?:to|that|about)\s+", "", title, flags=re.IGNORECASE).strip()
-            return capitalize_first(title), place, prox
-    return None
+def parse_geo(body: str, raw: dict | None = None) -> tuple[str, str, str] | None:
+    """'when I get home to take out the trash' -> ('Take out the trash', 'home', 'enter').
+    The place is a [places] key, or None when the place named isn't configured."""
+    g = places.parse(body, raw or {})
+    return (g.title, g.place.key if g.place else None, g.proximity) if g else None
 
 
 def h_geo_reminder(r: Route, ctx: Context) -> Result:
-    parsed = parse_geo(r.body)
-    if not parsed or not parsed[0]:
-        msg = "Only “when I get home” / “when I leave” reminders are supported."
+    g = places.parse(r.body, ctx.cfg.raw)
+    if not g or not g.title:
+        msg = "Couldn't tell what to remind you about, or where. Nothing set."
         ctx.notify("Not done", msg)
         return Result("refused", msg)
-    title, place, prox = parsed
-    try:
-        address = ctx.address_lookup()
-    except Exception as e:
-        ctx.notify("Not done", f"Couldn't read your home address from Contacts: {e}")
-        return Result("failed", f"my card address: {e}")
-    when = "arrive home" if prox == "enter" else "leave home"
-    ctx.trace("geo_reminder", title=title, place=place, proximity=prox, address_source="Contacts My Card")
+    known = ", ".join(p.name for p in places.places(ctx.cfg.raw))
+    if g.place is None and g.heard == "here":
+        msg = (f"I don't have access to your location, so I can't tell where \u201chere\u201d is. No reminder "
+               f"was set. Name the place instead (known places: {known}).")
+        ctx.notify("Not done", msg)
+        return Result("refused", "location reminder for 'here': no access to your location")
+    if g.place is None:
+        msg = (f"Don't know where “{g.heard}” is, so no reminder was set. Known places: {known} "
+               f"(add others under [places] in config.toml).")
+        ctx.notify("Not done", msg)
+        return Result("refused", f"unknown place {g.heard!r}")
+    p, when_ = g.place, places.describe(g)
+    rc = ctx.cfg.section("reminders")
+    radius = p.radius_m or rc.get("geofence_radius_m", 100)
+    if p.lat is not None and p.lon is not None:
+        where, source = ["--lat", str(p.lat), "--lon", str(p.lon)], "coordinates in config"
+    elif p.address:
+        where, source = ["--address", p.address], "address in config"
+    else:
+        label = p.contact_label or "home"
+        try:
+            address = ctx.address_lookup() if label == "home" else ctx.address_lookup(label)
+        except Exception as e:
+            ctx.notify("Not done", f"Couldn't read the {p.name} address from your My Card in Contacts: {e}")
+            return Result("failed", f"my card address ({label}): {e}")
+        where, source = ["--address", address], f"Contacts My Card ({label})"
+    ctx.trace("geo_reminder", title=g.title, place=p.key, proximity=g.proximity, address_source=source)
     if ctx.dry("reminder"):
-        ctx.notify("Dry run", f"Would remind you to “{title}” when you {when}")
-        return Result("dry_run", f"DRY RUN: would create {prox} geofence reminder {title!r}")
-    helper = ctx.cfg.section("reminders").get("georeminder", str(PROJECT_DIR / "build" / "georeminder"))
-    cmd = [helper, "--title", title, "--address", address, "--proximity", prox, "--place", "Home",
-           "--radius", str(ctx.cfg.section("reminders").get("geofence_radius_m", 100))]
-    ctx.trace("command", target="georeminder (EventKit)", title=title, proximity=prox, place="Home (My Card)")
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        ctx.notify("Dry run", f"Would remind you to “{g.title}” when you {when_}")
+        return Result("dry_run", f"DRY RUN: would create {g.proximity} geofence reminder {g.title!r} ({p.key})")
+    helper = rc.get("georeminder", str(PROJECT_DIR / "build" / "georeminder"))
+    cmd = [helper, "--title", g.title, *where, "--proximity", g.proximity, "--place", p.name,
+           "--radius", str(radius)]
+    ctx.trace("command", target="georeminder (EventKit)", title=g.title, proximity=g.proximity, place=f"{p.name} ({source})")
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     try:
-        out = json.loads(p.stdout.strip().splitlines()[-1])
+        out = json.loads(proc.stdout.strip().splitlines()[-1])
     except Exception:
-        out = {"ok": False, "error": (p.stderr or p.stdout or "no output").strip()[:300]}
+        out = {"ok": False, "error": (proc.stderr or proc.stdout or "no output").strip()[:300]}
     ctx.trace("command_result", ok=out.get("ok"), **{k: v for k, v in out.items() if k not in ("ok", "lat", "lon")})
     if not out.get("ok"):
         ctx.notify("Not done", f"Location reminder failed: {out.get('error')}")
         return Result("failed", f"georeminder: {out.get('error')}", 422)
-    ctx.notify("Reminder set", f"{title}: when you {when}")
-    return Result("done", f"geofence reminder {title!r} ({prox} home, list {out.get('list')!r})")
+    ctx.notify("Reminder set", f"{g.title}: when you {when_}")
+    return Result("done", f"geofence reminder {g.title!r} ({g.proximity} {p.key}, list {out.get('list')!r})")
 
 
 def _title(model_title, body: str) -> str:

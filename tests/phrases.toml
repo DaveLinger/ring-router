@@ -655,3 +655,63 @@ rule = "scheduled_send"
 say = "Okay, I'm leaving now"
 route = "scene"
 scene = "leaving"
+
+# ------------------------------------------- continuations and pronoun follow-ups --
+[[case]]
+say = "Also tell her I'll grab dinner on the way home"
+route = "imessage_followup"
+pronoun = "her"
+extracted = "I'll grab dinner on the way home"
+
+[[case]]
+say = "And tell Terri I'll grab dinner"
+route = "imessage"
+recipient = "terri"
+extracted = "I'll grab dinner"
+
+[[case]]
+say = "Oh, and let him know I'm running late"
+route = "imessage_followup"
+pronoun = "him"
+extracted = "I'm running late"
+
+[[case]]
+say = "Ask her if she wants Thai tonight"
+route = "imessage_followup"
+pronoun = "her"
+rewrite = "ask_question"
+
+[[case]]
+say = "Tell them I'll be there at 8"
+route = "imessage_followup"
+pronoun = "them"
+
+[[case]]
+say = "Plus turn off the office fan"
+route = "home"
+action = "off"
+
+[[case]]
+say = "Tell me a joke"
+route = "agent"
+
+# --------------------------------------------------------- places (reminders) --
+[[case]]
+say = "Remind me to buy protein when I get to the gym"
+route = "reminder"
+location_trigger = true
+
+[[case]]
+say = "Remind me to grab my keys when I leave here"
+route = "reminder"
+location_trigger = true
+
+[[case]]
+say = "Remind me to call mom when I get a chance"
+route = "reminder"
+location_trigger = false
+
+[[case]]
+say = "Remind me to finish the report when I get to it"
+route = "reminder"
+location_trigger = false

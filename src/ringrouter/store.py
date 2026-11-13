@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS trace (
   data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS trace_delivery ON trace(delivery_id, ts);
+CREATE TABLE IF NOT EXISTS kv (       -- small facts with a time, e.g. who was messaged last
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL,
+  ts REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS pending (
   id TEXT PRIMARY KEY,
   delivery_id TEXT,
@@ -64,6 +69,19 @@ class Store:
                 " transcript=COALESCE(excluded.transcript, transcript), route=COALESCE(excluded.route, route),"
                 " summary=COALESCE(excluded.summary, summary), updated=excluded.updated",
                 (delivery_id, state, transcript, route, summary, now, now))
+
+    def set_kv(self, k: str, v: str) -> None:
+        with self.lock:
+            self.conn.execute("INSERT INTO kv(k, v, ts) VALUES(?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v,"
+                              " ts=excluded.ts", (k, v, time.time()))
+
+    def get_kv(self, k: str, max_age_s: float | None = None) -> str | None:
+        """The value, or None if unset or older than max_age_s."""
+        with self.lock:
+            row = self.conn.execute("SELECT v, ts FROM kv WHERE k=?", (k,)).fetchone()
+        if not row or (max_age_s is not None and time.time() - row[1] > max_age_s):
+            return None
+        return row[0]
 
     def recent(self, limit: int = 20) -> list[tuple]:
         with self.lock:

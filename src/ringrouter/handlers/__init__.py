@@ -19,13 +19,14 @@ from typing import Callable
 
 from ..notify import Button, Notice  # noqa: F401  (re-exported)
 from ..router import Route
-from .apple import (EVENT_SCHEMA, GEO_PATTERNS, REMINDER_SCHEMA, applescript_note, default_end,  # noqa: F401
+from .apple import (EVENT_SCHEMA, REMINDER_SCHEMA, applescript_note, default_end,  # noqa: F401
                     h_calendar, h_geo_reminder, h_list_add, h_note, h_reminder, h_remember, my_card_address,
                     parse_geo)
 from .context import Context, Result
 from .home import (CMD_TO_ACTION, execute_home, get_hubitat, h_home, h_scene, home_status, read_back,  # noqa: F401
                    run_home)
-from .messages import compose_imessage, h_imessage, parse_contacts, resolve_handle, send_imessage  # noqa: F401
+from .messages import (compose_imessage, h_imessage, h_imessage_followup, parse_contacts,  # noqa: F401
+                       recipient_pronoun, resolve_handle, send_imessage)
 from .models import AGENT_THREAD, _default_agent_runner, h_agent, h_llm, h_research, system_prompt  # noqa: F401
 
 log = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ SLOW_ROUTES = {"llm", "research", "agent", "claude_code"}
 # Routes that act on the world right away. A recording delivered long after it was spoken (the ring
 # was out of range, the phone was offline) asks first instead of running: holding the button meant
 # "now", not "whenever this arrives".
-LATE_CONFIRM_ROUTES = {"imessage", "home", "scene"}
+LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "home", "scene"}
 
 
 def h_discard(r: Route, ctx: Context) -> Result:
@@ -66,6 +67,7 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
     "cancelled": h_cancelled,
     "refuse": h_refuse,
     "imessage": h_imessage,
+    "imessage_followup": h_imessage_followup,
     "note": h_note,
     "remember": h_remember,
     "list_add": h_list_add,

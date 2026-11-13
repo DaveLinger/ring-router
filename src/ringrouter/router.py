@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import cancel, recipients
+from . import cancel, places, recipients
 from .text import SEP, capitalize_first, clean, match_prefix, simple, strip_body
 
 QUESTION_WORDS = ("what", "what's", "whats", "when", "when's", "where", "where's", "who", "who's",
@@ -50,6 +50,10 @@ def route(transcript: str, cfg) -> Route:
     if phrase:
         return Route("cancelled", t, params={"phrase": phrase}, reason=f"ends with cancel phrase {phrase!r}")
 
+    # A spoken continuation ("Also tell her...", "And turn off the fan", "Oh, and add milk") means the
+    # same as the command alone. Only at the start, and only when something follows.
+    t = strip_continuation(t)
+
     # 2. scenes: exact whole-transcript match ---------------------------------
     whole = simple(t)
     for key, scene in raw.get("scenes", {}).items():
@@ -75,6 +79,16 @@ def route(transcript: str, cfg) -> Route:
 
 
 # ------------------------------------------------------------------- helpers --
+
+CONTINUATION = re.compile(r"(?:oh(?![\w'])" + SEP + r"*)?(?:(?:and|also|plus|then)(?![\w'])" + SEP + r"*)+",
+                          re.IGNORECASE)
+
+
+def strip_continuation(t: str) -> str:
+    """'Also, tell her I'm late' -> 'tell her I'm late'. Unchanged if nothing would be left."""
+    m = CONTINUATION.match(t)
+    return t[m.end():] if m and m.end() < len(t) and t[m.end():].strip() else t
+
 
 VERBS_ASK = ("ask", "hey", "yo")
 VERBS_TELL = ("tell", "message", "text", "send a message to", "send a text to", "let")
@@ -206,8 +220,7 @@ def _reminder(t: str, raw: dict) -> Route | None:
         if m[0] != "remind me" else strip_body(t[m[1]:])
     if not body:
         return None
-    location = bool(re.search(r"\bwhen i (get|arrive|leave|am|'m) (home|to work|at|leave)\b|\bwhen i get (home|back)\b"
-                              r"|\bwhen i leave\b|\bwhen i arrive\b", t, re.IGNORECASE))
+    location = places.parse(body, raw) is not None      # "when I get home / to the gym / leave work"
     return Route("reminder", t, body=body, params={"location_trigger": location}, reason="reminder prefix")
 
 
@@ -305,11 +318,23 @@ def _home_suffix(t: str, raw: dict) -> Route | None:
                  reason="device then on/off")
 
 
+PRONOUN_AT = re.compile(r"(her|him|them)(?![\w'])" + SEP + "*", re.IGNORECASE)
+
+
+def _who(t: str, pos: int, recips: dict):
+    """The recipient at t[pos:]: a name, or "her"/"him"/"them" (whoever was messaged last: the
+    handler decides, since the router keeps no state)."""
+    m = PRONOUN_AT.match(t, pos)
+    if m:
+        return recipients.RecipientMatch(None, "pronoun", m.group(1).lower(), m.end())
+    return recipients.resolve(t, pos, recips)
+
+
 def _message(t: str, raw: dict) -> Route | None:
     recips = raw.get("recipients", {})
     sm = match_prefix(t, ["send"])
     if sm:                                    # "send Terri a text (that / saying) I'm late"
-        rm = recipients.resolve(t, sm[1], recips)
+        rm = _who(t, sm[1], recips)
         k = rm and match_prefix(t, ["a text message", "a message", "a text"], rm.end)
         if k:
             return _message_route(t, rm, "tell", t[k[1]:])
@@ -317,14 +342,14 @@ def _message(t: str, raw: dict) -> Route | None:
     if v:
         verb, pos = v
         if verb == "let":  # "let terri know that ..."
-            rm = recipients.resolve(t, pos, recips)
+            rm = _who(t, pos, recips)
             if not rm:
                 return None
             k = match_prefix(t, ["know that", "know"], rm.end)
             if not k:
                 return None
             return _message_route(t, rm, "tell", t[k[1]:])
-        rm = recipients.resolve(t, pos, recips)
+        rm = _who(t, pos, recips) if verb not in ("hey", "yo") else recipients.resolve(t, pos, recips)
         if rm is None:
             return None
         if verb in VERBS_ASK and verb != "ask" and rm.tier == "unknown":
@@ -363,8 +388,10 @@ def _message_route(t: str, rm, kind: str, rest: str, bare: bool = False) -> Rout
         elif low.startswith("to "):
             body = capitalize_first(body[3:])  # "tell terri to grab milk" -> "Grab milk"
         body = capitalize_first(body)
-    tier_route = {"strong": "imessage", "weak": "imessage", "unknown": "refuse"}[rm.tier]
+    tier_route = {"strong": "imessage", "weak": "imessage", "unknown": "refuse", "pronoun": "imessage_followup"}[rm.tier]
     params = {"recipient": rm.key, "tier": rm.tier, "heard": rm.heard, "rewrite": rewrite}
+    if rm.tier == "pronoun":
+        params = {"pronoun": rm.heard, "rewrite": rewrite}
     if rm.tier == "unknown":
         params.update(rule="unknown_recipient", message=f"Didn't recognize '{rm.heard}', nothing sent.")
     return Route(tier_route, t, body=body, verb="bare" if bare else kind, params=params,

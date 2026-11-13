@@ -153,6 +153,14 @@ revisit if real use shows a need.
 | 2. Allowlisted, weak match | "tell sherry…" | Pushcut confirmation: **Send / Cancel** |
 | 3. Not allowlisted | "tell harry…" | Never sent: "Didn't recognize 'harry', nothing sent." |
 | 3b. *(later)* LLM guess | "tell harry…" | Suggests who you meant from message recency; you confirm |
+| Pronoun follow-up | "tell her…", "let him know…", "ask them…" | The last recipient within `[messages] followup_window_s` (600 s): sends if the pronoun fits their `pronoun` (a group chat is "them"), else **Send / Cancel**; nobody recent → refused |
+
+**Pronoun follow-ups** ("Tell Terri I'm on my way" → "Also tell her I'll grab dinner"). The router keeps
+no state, so "tell her/him/them" routes to `imessage_followup`, and the handler looks up who was
+messaged last (recorded on every send, dry run or status-unknown send). A pronoun that doesn't fit
+that recipient, or a recipient with no `pronoun` set, gets a tap rather than a guess; the same is
+true when the agent picked the command out of background noise. A leading "also", "and", "plus",
+"then" or "oh, and" is stripped before routing, for every route.
 
 A near miss (tier 2) must be spelled alike **and** sound alike, and either end the same way ("Jerry",
 "Sherry" for Terri) or be very close ("Instincts"). "Troy" and "Tara" share only T-R with Terri and are
@@ -206,8 +214,12 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 - **Shopping list:** on-device structured output splits items, so "mac and cheese" stays one item.
   If an item fails the rest are still tried, and the notification lists what was added and what
   wasn't; if Reminders stops answering, the remaining items are not tried.
-- **Location reminders** are for home only. "When I leave work" or "when I arrive at the office" is
-  refused rather than turned into a home geofence.
+- **Location reminders:** home (the Contacts My Card address) plus any place under `[places]`, each with
+  spoken names and an address, coordinates, or a My Card label (`contact_label = "work"`); optional
+  `radius_m`. Parsing is in `places.py` (pure, shared by the router and the handler). An unknown place
+  ("when I get to the bank") is refused with the known places listed, never turned into a home
+  geofence. "When I leave here / arrive here" is refused: ring-router has no access to your location,
+  so it can't know where "here" is. "When I get to it" and "when I get a chance" are not places.
 - **Remember:** one note each, because macos-mcp caps note bodies at 2,000 characters.
 - **Research:** like "ask ChatGPT" but the output is a note; written via AppleScript to avoid the 2,000-character cap.
 

@@ -37,6 +37,7 @@ command = ["/opt/homebrew/bin/node", "vendor/node_modules/mcp-macos/bin/run.cjs"
 
 [recipients.terri]
 display = "Terri"
+pronoun = "her"                      # "tell her ..." right after messaging Terri goes to Terri (she/he/they)
 contact = "Terri Lastname"           # Contacts card name
 # handle = "+15555550100"
 sounds_like = ["terri", "terry", "teri", "tari", "tery", "terrie"]
@@ -47,6 +48,7 @@ contact = "Instinct"
 sounds_like = ["instinct", "in stinct", "instink"]
 bare = true
 
+# A group chat (chat_id) is "them" without saying so.
 [recipients.the_guys]
 display = "the guys"
 chat_id = "any;+;chat000000000000000000"   # Messages chat ID of the group
@@ -128,8 +130,30 @@ spoken = ["shopping list", "grocery list", "groceries list", "groceries", "shopp
 [reminders]
 # "Remind me when I get home / when I leave": home = the address on your Contacts "My Card",
 # read fresh each time (geocoded by Apple); the geofence syncs to your iPhone via iCloud.
+# Other places are listed under [places]. "When I leave here" is refused: there's no access to
+# your location, so "here" can't be known.
 geofence_radius_m = 100
 # georeminder = "build/georeminder"   # helper binary (built by helpers/georeminder/build.sh)
+
+# -------------------------------------------------------------------- places --
+# Places for "remind me when I get to the gym / when I leave work". Home is built in (My Card).
+# An unknown place is refused, never guessed. Give one of: address, lat + lon, or contact_label
+# (an address on your Contacts My Card with that label, e.g. "work").
+# [places.gym]
+# name = "Gym"
+# spoken = ["the gym", "gym"]          # "the"/"my" in front is always allowed
+# address = "1 Fitness Way, Town, ST 12345"
+# radius_m = 150                       # optional; default [reminders] geofence_radius_m
+#
+# [places.work]
+# spoken = ["work", "the office", "my office"]
+# contact_label = "work"
+
+# ------------------------------------------------------------------ messages --
+[messages]
+# "Tell her ..." / "let him know ..." means whoever you messaged last, for this long. A pronoun that
+# matches that recipient's `pronoun` sends; one that doesn't (or none set) asks with a Send tap.
+followup_window_s = 600
 
 # ----------------------------------------------------------------- calendars --
 

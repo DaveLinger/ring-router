@@ -73,6 +73,7 @@ Three ideas hold it together:
 | *"Tell Sherry I'm on my way"* | ❓ Close to "Terri": asks **Send / Cancel** first |
 | *"Tell Harry…"* · *"Tell Terri's mom…"* | 🚫 Not on the allowlist, nothing sent |
 | *"Tell Terri I'll be late. Scrap that."* | 🚫 **Cancelled**, nothing sent |
+| *"Tell Terri I'm on my way"* → *"Also tell her I'll grab dinner"* | 💬 "Her" = whoever you messaged in the last 10 minutes, if that recipient's `pronoun` fits; otherwise a **Send / Cancel** tap |
 
 **Notes, lists, reminders, calendar**
 
@@ -83,7 +84,9 @@ Three ideas hold it together:
 | *"Add milk, eggs and mac and cheese to my shopping list"* | 🛒 Three reminders: Milk · Eggs · Mac and cheese |
 | *"Remind me tomorrow at 5pm to call the vet"* | ⏰ Reminder; the receipt reads **"Call the vet: Fri Nov 13, 5:00 PM"** |
 | *"Remind me in 20 minutes to check the oven"* · *"…on Monday to put the bins out"* | ⏰ Exactly 20 minutes on · due that day, no alert time |
-| *"Remind me when I get home to take out the trash"* | 📍 Geofenced reminder at the address on your Contacts card |
+| *"Remind me when I get home to take out the trash"* · *"…when I leave"* | 📍 Geofenced reminder at the address on your Contacts card (arriving or leaving) |
+| *"Remind me to buy protein when I get to the gym"* · *"…when I leave work"* | 📍 Any place listed under `[places]` (an address, coordinates, or a labelled address on your Contacts card); an unknown place is refused with the known ones listed |
+| *"Remind me to grab my keys when I leave here"* | 🚫 Refused: there's no access to your location, so "here" can't be known |
 | *"Add dentist Tuesday at 3 to my calendar"* | 📅 The coming Tuesday at 3:00 PM ("next Tuesday" is Tuesday of next week) |
 | *"Add dinner with the guys tomorrow from 6 to 8pm to our calendar"* | 📅 On the shared calendar, ending at 8 |
 | *"Add Terri's birthday on December 3rd to my calendar"* | 📅 An all-day event |
@@ -131,6 +134,12 @@ Three ideas hold it together:
 - **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt shows the exact text sent.
 - **Cancel by voice.** End any command with "scrap that", "never mind", "cancel cancel"… It always
   cancels, so "tell Terri never mind" can't be sent as a message (a known limit).
+- **"Tell her…" means the last person you messaged**, within `[messages] followup_window_s` (10
+  minutes). It sends straight away only when the pronoun matches that recipient's `pronoun` (a group
+  chat is "them"); a mismatch or an unset pronoun gets a **Send / Cancel** tap, and with nobody
+  messaged recently nothing is sent.
+- **Continuations are fine.** A leading "also", "and", "plus", "then" or "oh, and" is ignored, for
+  every kind of command.
 
 </details>
 
@@ -371,6 +380,8 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | HomeKit-only locks (e.g. Laundry Room Door) | ✅ Live: lock, unlock and lock state verified on the Laundry Room Door (the bridge patch now uses HomeKit's lock-mechanism characteristics) |
 | Tailscale Funnel limited to `/hook`, `/confirm`, `/answers`, `/health`; activity page tailnet-only | ✅ Live |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
+| Named places for location reminders (`[places]`), "here" refusal | 🟡 Tested with a faked helper; refusals checked live; no place configured on this install yet |
+| "Tell her…" follow-ups, leading "also/and" | ✅ Checked end to end through the live service (Terri sends are dry runs while `live_recipients` is only you) |
 | Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
 | Daily self-test | ✅ Installed; first run passed all eight checks |
 | Agent home tools | 🟡 Tried live: the agent found the right device and went through the home route for both a state question and a lock. Both failed at the HomeKit lock bug, since fixed; not re-run through the agent yet |
@@ -404,6 +415,7 @@ ring-router/
 │   ├── agents.py      # the general agent (Pydantic AI): tools, guards, limits
 │   ├── fm.py          # Apple on-device model wrapper (greedy)
 │   ├── llm.py         # OpenRouter client, follow-up memory, answer store
+│   ├── places.py      # named places for location reminders
 │   ├── hubitat.py     # device catalog and spoken-name matching; Hubitat Maker API
 │   ├── homekit.py     # HomeKit via HomeMCPBridge; the combined catalog
 │   ├── mcp.py         # minimal stdio MCP client (with a hard timeout)
