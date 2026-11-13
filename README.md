@@ -93,9 +93,11 @@ Three ideas hold it together:
 | You say | What happens |
 | --- | --- |
 | *"Turn off the living room lights"* · *"Kitchen lights off"* · *"Turn the lights off in the kitchen"* | 💡 Every light in that room |
-| *"Set the master bedroom fan to low"* · *"Dim the sconces to 20%"* | 🌀 Fan speed and dimmer levels |
+| *"Set the master bedroom fan to low"* · *"Dim the sconces to 20%"* | 🌀 Fan speed (low / medium / high, through HomeKit) and dimmer levels |
 | *"Turn on the living room fan"* | 🌀 "Fan" means the ceiling fan when several match; otherwise it asks "Which one?" |
-| *"Lock the garage patio door"* · *"Open the front garage door"* | 🔒 Run as spoken (confirm-first is opt-in). Locks that exist only in HomeKit don't work yet: see [Status](#status) |
+| *"Lock the laundry room door"* · *"Unlock the front door"* · *"Open the front garage door"* | 🔒 Any lock or garage door in HomeKit, run as spoken (confirm-first is opt-in) |
+| *"Is the laundry room door locked?"* | 🔒 Lock and door state (through the general agent's home tools) |
+| *"Set the guest bedroom fan to high"* | 🏷️ Your own names: nicknames for devices and rooms in `[home]` (here "guest bedroom" = HomeKit's Guest Room) |
 | *"Turn off everything"* | 💡 Everything switchable except outlets and plugs |
 | *"Goodnight"* (the whole phrase) | 🌙 A scene: a fixed list of device actions |
 | *"Is the garage door closed?"* · *"Which kitchen lights are on?"* | 🧠 The agent reads the device state |
@@ -170,7 +172,18 @@ Three ideas hold it together:
 - **Ambiguous means ask.** "Turn off the living room fan" with two fans changes nothing and asks
   which. "Open the door" does not open the garage.
 - **Hands off.** Detectors, alarms and sirens are never controlled; `[home] exclude` lists anything
-  else, on either backend. "Everything" spares outlets and plugs.
+  else, on either backend, and `[homekit] exclude_rooms` hides whole rooms (e.g. a "Virtual" room of
+  switches that drive automations). "Everything" spares outlets and plugs.
+- **Your names, not HomeKit's.** `[home] aliases` maps a whole spoken name to a device ("towel
+  warmers" → Master Bathroom Towel & Mirror Warmers); `[home] room_aliases` maps a room name anywhere
+  in a phrase ("guest bedroom" → Guest Room); `[home] prefer` breaks ties ("fan" → the ceiling fan).
+  Naming a room keeps the match inside it, so "the guest room ceiling fan" never finds another
+  room's ceiling fan.
+- **HomeKit is enough.** Lights, dimmers, fans (speeds included), locks and garage doors all work
+  through HomeKit, including Z-Wave devices bridged in from Hubitat. The Hubitat Maker API module
+  (`[hubitat] enabled`) is optional; this install has it off. Fans bridged from Hubitat need their
+  driver's speed list filled in (run **Configure** on the device in Hubitat once), and "high" is
+  sent as 99%, because Hubitat's integration treats 100% as "on, keep the current speed".
 - **Optional read-back.** With `[home] read_back = true`, lock, unlock, open and close wait for the
   device and report what it did: "Front Door locked (confirmed)", or "was told to lock but reports
   unlocked". Off by default, because the command then waits on the device.
@@ -360,8 +373,9 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
 | Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
 | Daily self-test | ✅ Installed; first run passed all eight checks |
-| Agent home tools | 🟡 Tried live: the agent found the right device and went through the home route for both a state question and a lock; both stopped at the HomeKit lock bug above |
-| Lock and door read-back (`[home] read_back`) | 🟡 Tested with fakes; state reading verified against the real Hubitat locks; not yet run end to end on a real device |
+| Agent home tools | 🟡 Tried live: the agent found the right device and went through the home route for both a state question and a lock. Both failed at the HomeKit lock bug, since fixed; not re-run through the agent yet |
+| Lock and door read-back (`[home] read_back`) | 🟡 Tested with fakes; lock state reading verified on real Hubitat and HomeKit locks; not yet run end to end through the router |
+| HomeKit fan speeds, device and room nicknames | ✅ Live: low / medium / high verified on all four ceiling fans; "set the guest bedroom fan to high" etc. run end to end |
 | Claude Code per host | ⬜ Stub; needs SSH to the VPS |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the

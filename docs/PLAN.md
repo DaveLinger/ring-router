@@ -183,7 +183,7 @@ named in `contact`: exactly one card must have that name, and only its Phone / E
 | 6a | "Remind me at 5 to call the vet" | Extract title + due time | on-device | macos-mcp `reminders_tasks` |
 | 6b | "Remind me when I get home to…" | Location trigger | on-device | Custom Swift EventKit helper (macos-mcp can't) |
 | 7 | "Add dentist Tuesday at 3 to my calendar" | Extract title, time, calendar | on-device | macos-mcp `calendar_events` |
-| 8 | "Turn off the living room lights" | Device/room match + action (deterministic) | none | Hubitat Maker API; HomeMCPBridge for HomeKit-native |
+| 8 | "Turn off the living room lights" | Device/room match + action (deterministic) | none | HomeMCPBridge (HomeKit); Hubitat Maker API optional |
 | 9 | "Ask ChatGPT / Claude / DeepSeek / Qwen …" | Prefix picks the model | yes | OpenRouter |
 | — | anything else (questions too) | General agent | yes | Pydantic AI on OpenRouter + macos-mcp + web search |
 
@@ -347,8 +347,12 @@ Two backends behind one set of spoken names, combined into one catalog:
   "outside lights" no longer includes Front Door Light (its HomeKit room is Front Door), "all
   lights" now includes the virtual Garage Lights Hold, and Floor Lamp Basic counts as a Master
   Bedroom light.
-- **HomeKit** (the superset) only for HomeKit-native devices. HomeKit entries whose manufacturer is
-  "Hubitat" are bridged duplicates and are skipped.
+- **HomeKit** (the superset): every device, including Z-Wave devices bridged in from Hubitat, when
+  the Hubitat module is off (this install). With Hubitat on, HomeKit entries whose manufacturer is
+  "Hubitat" are bridged duplicates and are skipped. Locks work too since the bridge patch was fixed
+  to use HomeKit's lock-mechanism characteristics (verified on the Laundry Room Door, 2026-11-12).
+  `[homekit] exclude_rooms = ["Mom's House", "Virtual"]`: the Virtual room holds switches that drive
+  automations (Garage Lights Hold), which must not be switched by "all lights".
 - **Never controlled:** anything named a detector, alarm or siren, and every label in
   `[home] exclude`, `[hubitat] exclude` or `[homekit] exclude`. The lists are merged and apply to both
   backends, so a device kept out of Hubitat can't come back through HomeKit.
@@ -370,8 +374,8 @@ Two backends behind one set of spoken names, combined into one catalog:
 
 | Backend | Covers | How | Status |
 | --- | --- | --- | --- |
-| **Hubitat Maker API** | Z-Wave devices on the hub (24 controllable) | Local HTTP to the hub, no MCP, no LLM | ✅ Live (on, dim, off verified) |
-| **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | HomeKit-native devices (front door lock, garage doors, fireplaces, outlets…) | Mac Catalyst MCP server, built locally and signed with a free Personal Team (HomeKit entitlement works) | ✅ Live |
+| **Hubitat Maker API** (optional) | Z-Wave devices on the hub (24 controllable) | Local HTTP to the hub, no MCP, no LLM | ✅ Live-tested; off on this install since 2026-11-12 |
+| **[HomeMCPBridge](https://github.com/coalsi/HomeMCPBridge)** | Everything in HomeKit: lights, dimmers, fans and speeds, locks, garage doors, outlets, plus the Hubitat devices bridged in | Mac Catalyst MCP server, built locally and signed with a free Personal Team (HomeKit entitlement works) | ✅ Live |
 
 **How a home command is resolved (deterministic, no LLM):**
 
@@ -380,9 +384,9 @@ Two backends behind one set of spoken names, combined into one catalog:
 2. Candidates are narrowed by the capability the action needs: unlock considers only locks, fan speed only fans.
    A spoken room name (after `room_aliases`) keeps the search inside that room whenever a device
    there fits, so "the guest room ceiling fan" can't land on the living room's ceiling fan.
-3. The spoken target is matched: `[hubitat] aliases` → exact label → room + "lights"
+3. The spoken target is matched: `[home] aliases` → exact label → room + "lights"
    ("the living room lights" = every light in that room) → "all the lights" → word overlap.
-4. If several devices tie, `[hubitat] prefer` breaks it (`["ceiling fan"]`: "the living room fan" →
+4. If several devices tie, `[home] prefer` breaks it (`["ceiling fan"]`: "the living room fan" →
    Living Room Ceiling Fan). Still tied → **"Which one?"** notification and nothing changes.
 5. Sensors, remotes and anything that looks like a detector, alarm or siren are never controllable.
 
@@ -490,7 +494,7 @@ Every route starts in dry run until you've watched it behave.
 | **2. Messaging** 🟡 | Router, tiers, on-device rewrite, iMessage send | Live to the test recipient; weak-match Send/Cancel works through the tunnel. Remaining: lift `live_recipients` |
 | **3. Models** ✅ | OpenRouter routes, `profile.md`, follow-ups, web search, answer page, research notes | Live-tested with all four models and research (notes wait on the Notes permission) |
 | **4. Apple apps** ✅ | Notes, reminders, shopping list, calendar live; location reminders from the My Card address | "When I get home" verified on the iPhone |
-| **5. Home** ✅ | Hubitat + HomeKit (HomeMCPBridge) in one catalog: matching, rooms, fans, dimmers, locks, garage doors, scenes | Both backends live-tested |
+| **5. Home** ✅ | Hubitat + HomeKit (HomeMCPBridge) in one catalog: matching, rooms, fans, dimmers, locks, garage doors, scenes | Both backends live-tested; HomeKit alone covers everything, including locks and fan speeds |
 | **6. General agent** ✅ | Pydantic AI over macos-mcp + web search, follow-ups, `run_command`, tool/action guard | Web answers, follow-ups and rerouting live-tested; macOS tools wait on permission prompts |
 | **7. Additional routes** | Shopping list & Remember → timer refusal → scenes → research → Claude Code per host → Focus (experimental) | Each live in order |
 
@@ -512,7 +516,7 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 - [x] macOS permissions (Messages, Notes, Reminders, Calendars full access, Contacts): granted to the service and verified.
 - [x] Calendars: default "Dave"; shared "Dave/Terri" (our, shared, Dave and Terri…); "Work". iCloud only: the Google calendars macOS also sees (calsync mirrors them) are filtered out via a patch to the vendored mcp-macos (`[calendars] sources`).
 - [x] Home location: read from the Contacts My Card each time; 100 m geofence.
-- [x] Devices: pulled from Hubitat automatically; nicknames in `[hubitat] aliases`, tie-breakers in `prefer`.
+- [x] Devices: pulled from HomeKit (and Hubitat, if enabled) automatically; nicknames in `[home] aliases` and `room_aliases`, tie-breakers in `[home] prefer`.
 - [x] OpenRouter model IDs: `gpt-6.1-terra`, `claude-sonnet-5.5`, `deepseek-v4.1-flash`, `qwen3.8-flash`; agent on `claude-sonnet-5.5`.
 - [ ] How long the Pebble app waits for a response.
 - [x] Pushcut: the notification's webhook URL accepts per-send title, text and action buttons (link and background-URL); confirmed on the phone.
@@ -523,7 +527,7 @@ Tier 3b and the gesture mode switch come later, if real use shows they're worth 
 | A misheard name texts the wrong person | Allowlist, tiers, confirmation on weak matches, receipts |
 | A timed-out send gets retried and double-texts | `unknown` sends are never re-sent automatically |
 | The on-device rewrite changes meaning | Greedy mode, fallback rules, `sends` tests, receipts; "tell" never rewritten |
-| HomeMCPBridge is young | Hubitat path for Z-Wave devices; HomeKit only for HomeKit-native devices |
+| HomeMCPBridge is young | Patched and pinned in `vendor/`; the Hubitat path can be switched back on with `[hubitat] enabled = true` |
 | macOS Local Network privacy blocks background tools | Ring Router.app wrapper; `check-permissions` verifies from the service's own context |
 | macos-mcp changes under opencode's npx cache | The router pins its own `mcp-macos@4.1.0` |
 
