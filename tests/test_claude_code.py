@@ -150,4 +150,6 @@ def test_subscription_runs_show_no_cost(ctx):
 def test_claude_inside_a_container(ctx):
     ctx.cfg.raw["hosts"]["truenas"]["claude"] = "sudo docker exec -i -w /root claude-code claude"
     argv, _ = command(ctx, "truenas", ["-p", "why is plex down"])
-    assert "sudo docker exec -i -w /root claude-code claude -p 'why is plex down'" in argv[-1]
+    import shlex
+    remote = shlex.split(argv[-1])[2]                      # bash -lc '<this>'
+    assert remote.endswith("&& sudo docker exec -i -w /root claude-code claude -p 'why is plex down'")
