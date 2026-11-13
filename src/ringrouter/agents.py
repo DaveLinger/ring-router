@@ -25,11 +25,10 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Callable
 
 from .llm import load_profile
-from .prompts import prompt
+from .prompts import now_line, prompt
 
 log = logging.getLogger(__name__)
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")   # no startup banner in the service log
@@ -104,10 +103,8 @@ def spec_for(kind: str, cfg, request: str = "", history: list[dict] | None = Non
 
 
 def instructions(spec: AgentSpec) -> str:
-    now = datetime.now().astimezone()
     parts = [prompt("spoken_preamble"), load_profile(), prompt(spec.prompt_name),
-             f"Current date and time: {now:%A %Y-%m-%d %H:%M} ({now.tzname()}). "
-             "Dates passed to tools use local time 'YYYY-MM-DD HH:mm:ss'."]
+             now_line() + " Dates passed to tools use local time 'YYYY-MM-DD HH:mm:ss'."]
     return "\n\n".join(p for p in parts if p)
 
 
@@ -203,9 +200,9 @@ def default_searcher(cfg, on_cost: Callable[[float | None], None] | None = None)
     model_id = ac.get("web_search_model", "deepseek/deepseek-v4.1-flash")
 
     def search(query: str) -> tuple[str, list[dict]]:
+        system = "\n\n".join(p for p in (prompt("web_search"), now_line(), load_profile()) if p)
         reply = client.chat(model_id, [
-            {"role": "system", "content": "Answer the search query factually and concisely from current web "
-                                          "results. Include specifics (names, addresses, prices, dates)."},
+            {"role": "system", "content": system},
             {"role": "user", "content": query}], web=True, web_results=int(ac.get("web_results", 5)))
         if on_cost:
             on_cost(reply.cost)

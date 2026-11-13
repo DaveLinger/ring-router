@@ -7,15 +7,15 @@ import logging
 from .. import md
 from ..llm import Reply, load_profile
 from ..notify import Button
-from ..prompts import prompt
+from ..prompts import now_line, prompt
 from ..router import Route, route
 from .context import Context, Result
 
 log = logging.getLogger(__name__)
 
 
-def system_prompt(*names: str) -> str:
-    parts = [prompt("spoken_preamble"), load_profile()] + [prompt(n) for n in names]
+def system_prompt(*names: str, now=None) -> str:
+    parts = [prompt("spoken_preamble"), load_profile(), now_line(now)] + [prompt(n) for n in names]
     return "\n\n".join(p for p in parts if p)
 
 
@@ -46,7 +46,7 @@ def h_llm(r: Route, ctx: Context) -> Result:
         if res is not None:
             return res
         name = f"{name} (via OpenRouter)"
-    messages = ([{"role": "system", "content": system_prompt("llm_answer")}] + history
+    messages = ([{"role": "system", "content": system_prompt("llm_answer", now=ctx.spoken_at())}] + history
                 + [{"role": "user", "content": question}])
     try:
         reply = ctx.llm.chat(m["model"], messages, web=bool(m.get("web_search", oc.get("web_search_ask", True))),
@@ -120,7 +120,7 @@ def h_research(r: Route, ctx: Context) -> Result:
     m = ctx.cfg.raw["models"][key]
     rc = ctx.cfg.section("research")
     folder = rc.get("notes_folder", "Research")
-    messages = [{"role": "system", "content": system_prompt("research")}, {"role": "user", "content": r.body}]
+    messages = [{"role": "system", "content": system_prompt("research", now=ctx.spoken_at())}, {"role": "user", "content": r.body}]
     try:
         reply = ctx.llm.chat(m["model"], messages, web=True, web_results=int(rc.get("web_results", 8)))
     except Exception as e:

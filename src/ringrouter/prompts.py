@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tomllib
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,3 +18,9 @@ def _load() -> dict:
 
 def prompt(name: str) -> str:
     return _load()[name]["text"].strip()
+
+
+def now_line(now: datetime | None = None) -> str:
+    """The current local date and time, for prompts ("this weekend", "tomorrow", "is it open now")."""
+    now = (now or datetime.now()).astimezone()
+    return f"Current date and time: {now:%A %Y-%m-%d %H:%M} ({now.tzname()})."
