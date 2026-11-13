@@ -389,7 +389,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Agent home tools | ✅ Live on the Laundry Room Door: "Is it locked?" (status), "get it locked" (runs), "unlock it" (held for a Send tap, then ran) |
 | Lock and door read-back (`[home] read_back`) | ✅ Live: "Laundry Room Door locked (confirmed)" / "unlocked (confirmed)" end to end (still off by default) |
 | HomeKit fan speeds, device and room nicknames | ✅ Live: low / medium / high verified on all four ceiling fans; "set the guest bedroom fan to high" etc. run end to end |
-| Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | 🟡 Built and tested with a faked CLI; each host answers "isn't set up yet" until it's reachable: the CLI isn't installed on the Mac, ring-router's SSH key isn't on the servers, and the two VPS addresses aren't configured |
+| Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | ✅ Live: a read-only question answered on each host, on the Claude subscription. Proceed / "go ahead" tested with a faked CLI only (nothing needed fixing yet) |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the
 roadmap. Notes for AI assistants working in this repo are in [CLAUDE.md](CLAUDE.md).

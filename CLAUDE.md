@@ -72,9 +72,9 @@ traffic). Code-level review can't confirm these. Flag assumptions instead.
 
 - **Cameras:** HomeMCPBridge snapshots crash on Catalyst.
 - **Send delay / Undo Send:** deferred.
-- **Claude Code per host:** built (`handlers/claude_code.py`), but no host is reachable yet (`not_ready`
-  in the owner's config): needs the CLI on the Mac, ring-router's key (`~/.ssh/ring-router_ed25519`)
-  authorized on each server, and the VPS addresses.
+- **Claude Code per host:** live on all four hosts. ring-router uses its own key
+  (`~/.ssh/ring-router_ed25519`); on TrueNAS it connects as `claude` and runs `sudo -n docker exec -i
+  claude claude` (a NOPASSWD sudo rule for exactly that). The Proceed path hasn't run for real yet.
 - `live_recipients` still limits real sends to the owner.
 
 ## What a useful review looks like
