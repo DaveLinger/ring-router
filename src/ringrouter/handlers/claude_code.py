@@ -63,13 +63,16 @@ def _settings(ctx: Context, host: str) -> tuple[dict, dict]:
 def command(ctx: Context, host: str, args: list[str]) -> tuple[list[str], str | None]:
     """The argv that runs `claude <args>` on the host, and the local working directory (None for SSH)."""
     cc, h = _settings(ctx, host)
+    # The CLI, or a command that reaches it, e.g. "sudo docker exec -i -w /root claude-code claude"
+    # when Claude Code lives in a container on that host.
     claude = h.get("claude", cc.get("claude", "claude"))
+    claude = shlex.split(claude) if isinstance(claude, str) else list(claude)
     workdir = h.get("workdir", "~")
     if not h.get("ssh"):
-        return [os.path.expanduser(claude), *args], os.path.expanduser(workdir)
+        return [os.path.expanduser(claude[0]), *claude[1:], *args], os.path.expanduser(workdir)
     cd = 'cd "$HOME"' + ("/" + shlex.quote(workdir[2:]) if workdir.startswith("~/") else "") \
         if workdir.startswith("~") else "cd " + shlex.quote(workdir)
-    remote = f"{cd} && {shlex.join([claude, *args])}"
+    remote = f"{cd} && {shlex.join([*claude, *args])}"
     ssh = ["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(cc.get('ssh_timeout_s', 15))}"]
     ident = cc.get("ssh_identity", "")
     if ident:      # a dedicated key, so a background run never waits on a password manager's prompt

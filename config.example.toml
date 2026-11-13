@@ -106,7 +106,8 @@ notes_folder = "Research"
 # --------------------------------------------------------------------- hosts --
 # Claude Code targets: "ask Claude Code on <host> ..." or "ask Claude on <host> ..." (naming a host
 # is what makes it Claude Code; "ask Claude ..." alone is the OpenRouter model). ssh = "" runs locally.
-# Per host, optional: claude (CLI path), read_tools / change_tools, allow_changes = false, model,
+# Per host, optional: claude (CLI path, or a command that reaches it, e.g. "sudo docker exec -i
+# claude-code claude" for Claude Code in a container), read_tools / change_tools, allow_changes = false, model,
 # not_ready = "why" (answers "isn't set up yet: why" instead of trying).
 
 [claude_code]

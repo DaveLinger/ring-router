@@ -145,3 +145,9 @@ def test_subscription_runs_show_no_cost(ctx):
     assert "subscription (API-equivalent ~$0.02)" in res.summary
     ctx.cfg.raw["claude_code"]["billing"] = "api"
     assert say(ctx, "Ask Claude on the old VPS why it's slow").summary.endswith(", $0.020")
+
+
+def test_claude_inside_a_container(ctx):
+    ctx.cfg.raw["hosts"]["truenas"]["claude"] = "sudo docker exec -i -w /root claude-code claude"
+    argv, _ = command(ctx, "truenas", ["-p", "why is plex down"])
+    assert "sudo docker exec -i -w /root claude-code claude -p 'why is plex down'" in argv[-1]
