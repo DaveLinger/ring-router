@@ -74,7 +74,8 @@ traffic). Code-level review can't confirm these. Flag assumptions instead.
 - **Send delay / Undo Send:** deferred.
 - **Claude Code per host:** live on all four hosts. ring-router uses its own key
   (`~/.ssh/ring-router_ed25519`); on TrueNAS it connects as `claude` and runs `sudo -n docker exec -i
-  claude claude` (a NOPASSWD sudo rule for exactly that). The Proceed path hasn't run for real yet.
+  claude claude` (a NOPASSWD sudo rule for exactly that); Claude Code in that container SSHes back into
+  the host for commands, so it needs no Docker inside. Proceed and spoken "go ahead" verified for real.
 - `live_recipients` still limits real sends to the owner.
 
 ## What a useful review looks like
