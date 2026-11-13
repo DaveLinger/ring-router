@@ -28,17 +28,39 @@ a light switch, or a question to the AI model of your choice.
 flowchart LR
     A["💍 Ring<br/><small>hold to talk</small>"] --> B["📱 Pebble app<br/><small>speech to text</small>"]
     B -- "signed webhook" --> C["🖥️ ring-router<br/><small>Mac mini</small>"]
-    C --> D{"Router"}
-    D --> E["💬 iMessage"]
-    D --> F["📝 Notes · ⏰ Reminders · 📅 Calendar"]
-    D --> G["💡 Home"]
-    D --> H["🤖 ChatGPT · Claude · DeepSeek · Qwen"]
-    D --> I["🧠 Agent"]
-    I -.->|"device state · control"| G
-    E & F & G & H & I --> J["🔔 Pushcut<br/><small>receipts, answers, confirms</small>"]
-    FM -.->|"“ask” → direct question"| E
-    FM -.->|"titles · item splits"| F
+    C --> D{"Router<br/><small>cancel · scene · fixed command</small>"}
+
+    subgraph MODS["Modules: each one can be switched off in [modules]"]
+        direction TB
+        MSG["💬 Messages<br/><small>messages</small>"]
+        NOTES["📝 Notes<br/><small>notes</small>"]
+        REM["⏰ Reminders · 🛒 lists · 📍 places<br/><small>reminders</small>"]
+        CAL["📅 Calendar<br/><small>calendar</small>"]
+        HOME["💡 Home: lights · fans · locks · garage<br/><small>home</small>"]
+        LLM["🤖 Ask a model · research<br/><small>models</small>"]
+        CC["🛠️ Claude Code on a host<br/><small>claude_code</small>"]
+        AG["🧠 General agent<br/><small>agent</small>"]
+    end
+
+    D --> MSG
+    D --> NOTES
+    D --> REM
+    D --> CAL
+    D --> HOME
+    D --> LLM
+    D --> CC
+    D -- "anything else" --> AG
+    AG -.->|"tools"| NOTES
+    AG -.->|"tools"| REM
+    AG -.->|"tools"| CAL
+    AG -.->|"state · control"| HOME
+    AG -.->|"web search"| W["🌐 Web"]
+    AG -.->|"run_command: a command<br/>heard inside chatter"| D
+    MODS --> P["🔔 Pushcut<br/><small>receipts, answers, confirms</small>"]
     FM["🍎 Apple Intelligence<br/><b>on-device model</b><br/><small>/usr/bin/fm · free · offline · ~0.35s</small>"]
+    FM -.->|"“ask” → direct question"| MSG
+    FM -.->|"titles · item splits"| NOTES
+    FM -.->|"reminder titles"| REM
     classDef apple fill:#f2f2f7,stroke:#8e8e93,stroke-width:2px,color:#1c1c1e
     class FM apple
 ```
@@ -49,6 +71,12 @@ flowchart LR
 3. **The router** checks, in order: a cancel phrase → an exact scene → a fixed command → a refusal →
    the general agent. Fixed commands never touch a cloud model.
 4. **The handler** acts, and **Pushcut** tells you what happened.
+
+**Every feature is a module you can turn off.** Set `messages`, `notes`, `reminders`, `calendar`,
+`home`, `models`, `agent` or `claude_code` to `false` under `[modules]` in `config.toml`. A command
+for a feature that's off is refused with a notice ("Calendar is turned off"), and the general agent
+loses that feature's tools too, so switching calendar off means nothing touches your calendar. The
+agent can use Notes, Reminders, Calendar, Home and the web, but it can never send a message.
 
 Three ideas hold it together:
 
@@ -292,7 +320,7 @@ would otherwise make every event appear twice.
 
 | File | What's in it | In git? |
 | --- | --- | --- |
-| `config.toml` | Recipients, models, lists, calendars, home, scenes, cancel phrases, dry-run flags | ❌ copy from `config.example.toml` |
+| `config.toml` | Module switches, recipients, models, lists, calendars, places, home, Claude Code hosts, scenes, cancel phrases, dry-run flags | ❌ copy from `config.example.toml` |
 | `.env` | Path token, signing secret, activity token, API keys (mode 600) | ❌ see `.env.example` |
 | `prompts.toml` | **Every instruction given to a model**, marked LIVE or DRAFT | ✅ |
 | `profile.md` | Facts about you added to every cloud-model prompt (location for "near me") | ❌ see `profile.example.md` |
@@ -382,14 +410,14 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | HomeKit-only locks (e.g. Laundry Room Door) | ✅ Live: lock, unlock and lock state verified on the Laundry Room Door (the bridge patch now uses HomeKit's lock-mechanism characteristics) |
 | Tailscale Funnel limited to `/hook`, `/confirm`, `/answers`, `/health`; activity page tailnet-only | ✅ Live |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
-| Named places for location reminders (`[places]`), "here" refusal | 🟡 Tested with a faked helper; refusals checked live; no place configured on this install yet |
+| Named places for location reminders (`[places]`), "here" refusal | ✅ Live: a real geofence reminder at the gym (address from config, geocoded by Apple) created through the service and removed; unknown places and "when I leave here" refused live |
 | "Tell her…" follow-ups, leading "also/and" | ✅ Checked end to end through the live service (Terri sends are dry runs while `live_recipients` is only you) |
 | Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
 | Daily self-test | ✅ Installed; first run passed all eight checks |
 | Agent home tools | ✅ Live on the Laundry Room Door: "Is it locked?" (status), "get it locked" (runs), "unlock it" (held for a Send tap, then ran) |
 | Lock and door read-back (`[home] read_back`) | ✅ Live: "Laundry Room Door locked (confirmed)" / "unlocked (confirmed)" end to end (still off by default) |
 | HomeKit fan speeds, device and room nicknames | ✅ Live: low / medium / high verified on all four ceiling fans; "set the guest bedroom fan to high" etc. run end to end |
-| Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | ✅ Live: a read-only question answered on each host, on the Claude subscription. Proposal → spoken "go ahead" (Mac mini) and → **Proceed** tap (Contabo) both verified: nothing changed until the go-ahead, a second "go ahead" was refused |
+| Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | ✅ Live on all four hosts, including Proceed and "go ahead" |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the
 roadmap. Notes for AI assistants working in this repo are in [CLAUDE.md](CLAUDE.md).

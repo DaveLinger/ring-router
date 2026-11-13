@@ -35,6 +35,10 @@ class Config:
     def state_dir(self) -> Path:
         return Path(os.path.expanduser(self.server.get("state_dir", "~/Library/Application Support/ring-router")))
 
+    def module_on(self, name: str) -> bool:
+        """[modules] <name> = false turns a whole feature off (default: on)."""
+        return bool(self.raw.get("modules", {}).get(name, True))
+
     def is_dry_run(self, route: str) -> bool:
         if self.server.get("dry_run", True):
             return True

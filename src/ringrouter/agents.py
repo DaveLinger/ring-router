@@ -48,6 +48,10 @@ GENERAL_TOOLS: dict[str, set[str]] = {
     # never: mail_messages; messages_chat only for reading, and only if [agents] read_messages = true
 }
 
+# [modules] that hide a tool from the agent when switched off.
+MODULE_OF_TOOL = {"calendar_events": "calendar", "calendar_calendars": "calendar", "reminders_tasks": "reminders",
+                  "reminders_lists": "reminders", "notes_items": "notes", "notes_folders": "notes"}
+
 # Words in the user's request that make a destructive action plausible. Checked against what the
 # user said (this request and the earlier turns of the follow-up thread), never against tool output.
 WRITE_INTENT = {
@@ -90,7 +94,7 @@ class AgentSpec:
 
 def spec_for(kind: str, cfg, request: str = "", history: list[dict] | None = None) -> AgentSpec:
     ac = cfg.section("agents")
-    tools = dict(GENERAL_TOOLS)
+    tools = {t: a for t, a in GENERAL_TOOLS.items() if cfg.module_on(MODULE_OF_TOOL.get(t, "agent"))}
     if ac.get("read_messages", False):
         tools["messages_chat"] = READ          # read only: the agent still can't send messages
     said = " ".join([m["content"] for m in history or [] if m["role"] == "user"] + [request])

@@ -130,7 +130,8 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
             res = run_home(ctx, action, spoken, confirm=ask)
             return res.state, res.summary
 
-    if ctx.cfg.section("agents").get("home_tools", True) and ctx.hubitat_factory(ctx) is not None:
+    if (ctx.cfg.module_on("home") and ctx.cfg.section("agents").get("home_tools", True)
+            and ctx.hubitat_factory(ctx) is not None):
         rerouter.home = HomeTools       # rides along with the rerouter, so agent runners keep their signature
 
     try:

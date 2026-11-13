@@ -2,6 +2,18 @@
 # Secrets (path token, signing secret, API keys) are NOT stored here: they live in
 # the git-ignored .env file (mode 600). See `ring-router init` and .env.example.
 
+[modules]
+# Switch whole features off. A command for a feature that's off is refused with a notice
+# ("Calendar is turned off"), and the general agent loses that feature's tools too.
+messages = true        # iMessage: "tell Terri ...", "tell her ..."
+notes = true           # "make a note", "remember" (and research, which saves a note)
+reminders = true       # "remind me ...", location reminders, the shopping list
+calendar = true        # "add ... to my calendar"
+home = true            # lights, fans, locks, garage doors, scenes; the agent's home tools
+models = true          # "ask ChatGPT / Claude / DeepSeek ...", research
+agent = true           # everything that matches no fixed command
+claude_code = true     # "ask Claude Code on <host> ...", "go ahead"
+
 [server]
 host = "127.0.0.1"          # never bind publicly; the tunnel forwards to this
 port = 8642

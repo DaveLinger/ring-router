@@ -348,6 +348,16 @@ All model instructions live in [`prompts.toml`](../prompts.toml).
 
 ---
 
+## Modules
+
+Every feature is a module with a switch in `[modules]` (default on): `messages`, `notes`, `reminders`,
+`calendar`, `home`, `models`, `agent`, `claude_code`. `handlers.ROUTE_MODULES` maps each route to the
+modules it needs (research needs `models` and `notes`); `handlers.run` refuses a route whose module is
+off with "<Module> is turned off ([modules] x = false)", so rerouted and confirmed commands obey it
+too. The general agent loses a switched-off module's tools (`agents.MODULE_OF_TOOL`; home tools are
+not attached when `home` is off). The router itself is unchanged, so a disabled command is
+recognised and refused instead of falling through to the agent.
+
 ## Home automation
 
 Two backends behind one set of spoken names, combined into one catalog:

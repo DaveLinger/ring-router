@@ -42,6 +42,24 @@ SLOW_CONFIRMS = {"claude_code"}      # a Proceed tap that starts minutes of work
 LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "home", "scene", "claude_code_proceed"}
 
 
+# [modules]: each feature can be switched off. A route belongs to the module(s) it needs; research
+# needs a model and Notes. The general agent also loses a switched-off module's tools (agents.py,
+# models.py), so turning calendar off really means nothing touches the calendar.
+MODULES = {"messages": "Messages", "notes": "Notes", "reminders": "Reminders", "calendar": "Calendar",
+           "home": "Home control", "models": "Asking models", "agent": "The general agent",
+           "claude_code": "Claude Code"}
+ROUTE_MODULES = {"imessage": ("messages",), "imessage_followup": ("messages",), "note": ("notes",),
+                 "remember": ("notes",), "list_add": ("reminders",), "reminder": ("reminders",),
+                 "calendar": ("calendar",), "home": ("home",), "scene": ("home",), "llm": ("models",),
+                 "research": ("models", "notes"), "agent": ("agent",), "claude_code": ("claude_code",),
+                 "claude_code_proceed": ("claude_code",)}
+
+
+def module_off(route: str, cfg) -> str | None:
+    """The [modules] key that turns this route off, or None if it may run."""
+    return next((m for m in ROUTE_MODULES.get(route, ()) if not cfg.module_on(m)), None)
+
+
 def h_discard(r: Route, ctx: Context) -> Result:
     return Result("discarded", r.reason)
 
@@ -87,6 +105,10 @@ HANDLERS: dict[str, Callable[[Route, Context], Result]] = {
 
 
 def run(r: Route, ctx: Context) -> Result:
+    off = module_off(r.route, ctx.cfg)
+    if off:
+        ctx.notify("Not done", f"{MODULES[off]} is turned off ([modules] {off} = false). Heard: \u201c{r.transcript}\u201d")
+        return Result("refused", f"module {off} is off")
     try:
         return HANDLERS[r.route](r, ctx)
     except (TimeoutError, subprocess.TimeoutExpired) as e:      # no answer: we can't know if it happened

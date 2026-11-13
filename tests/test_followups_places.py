@@ -144,3 +144,29 @@ def test_here_is_refused_for_lack_of_location(live, text):
 def test_home_still_comes_from_my_card(live):
     say(live, "Remind me when I get home to take out the trash")
     assert live.calls()["--address"] == "home address" and live.calls()["--place"] == "Home"
+
+
+# ----------------------------------------------------------------------- modules --
+
+@pytest.mark.parametrize("module,text", [("calendar", "Add dentist Tuesday at 3 to my calendar"),
+                                         ("messages", "Tell Terri I'm on my way"),
+                                         ("reminders", "Remind me at 5 to call the vet"),
+                                         ("home", "Turn off the office fan"),
+                                         ("claude_code", "Ask Claude on the NAS why Plex is down")])
+def test_a_module_switched_off_refuses_its_commands(ctx, module, text):
+    ctx.cfg.raw["modules"] = {module: False}
+    res = say(ctx, text)
+    assert res.state == "refused" and f"[modules] {module} = false" in ctx.notifier.sent[-1].text
+
+
+def test_research_needs_notes_too(ctx):
+    ctx.cfg.raw["modules"] = {"notes": False}
+    assert say(ctx, "Research the best robot vacuum under 500 dollars").state == "refused"
+
+
+def test_the_agent_loses_a_switched_off_modules_tools(cfg):
+    from ringrouter.agents import spec_for
+    cfg.raw["modules"] = {"calendar": False, "notes": False}
+    tools = set(spec_for("general", cfg).tools)
+    assert not tools & {"calendar_events", "calendar_calendars", "notes_items", "notes_folders"}
+    assert "reminders_tasks" in tools
