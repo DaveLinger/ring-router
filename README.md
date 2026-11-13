@@ -11,14 +11,56 @@ a light switch, or a question to the AI model of your choice.
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Core](https://img.shields.io/badge/core-stdlib%20only-success)
 ![Platform](https://img.shields.io/badge/platform-macOS%2027-000000?logo=apple&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-482-brightgreen)
+![Tests](https://img.shields.io/badge/tests-503-brightgreen)
 ![Status](https://img.shields.io/badge/status-live%20(test%20recipients)-yellow)
 
-[How it works](#how-it-works) · [What you can say](#what-you-can-say) · [Safety](#safety) ·
+[Design principles](#design-principles) · [How it works](#how-it-works) · [What you can say](#what-you-can-say) · [Safety](#safety) ·
 [Quick start](#quick-start) · [Operating it](#operating-it) · [Testing](#testing) ·
 [Status](#status) · [**Build plan →**](docs/PLAN.md)
 
 </div>
+
+---
+
+## Design principles
+
+### 1. The cheapest path that works
+
+Every command climbs a ladder and stops at the first rung that can handle it:
+
+| Rung | What runs | Cost | Used for |
+| --- | --- | --- | --- |
+| **1. Code only** | Deterministic routing and handlers | **$0**, instant | Most commands, end to end: "tell Terri…", lights, locks and fans, timed and location reminders, calendar dates and times, scenes, cancels |
+| **2. On-device model** | Apple Intelligence (`/usr/bin/fm`) | **$0**, offline, ~0.35 s | Small language jobs: "ask Terri when she'll be home" → "When will you be home?", note titles, splitting a shopping list, reminder titles, making a follow-up question stand alone |
+| **3. Subscription** | Claude Code on your own machines | Flat: your Claude plan | "Ask Claude on the home server why Plex is down", then "go ahead" to fix it |
+| **4. Pay per use** | Cloud models through OpenRouter | Cents per request | Open questions to the model you name (ChatGPT, Claude, DeepSeek, Qwen), research, web search, and the general agent for anything that matches no fixed command |
+
+A cloud model is never in the path of a fixed command, and when one is needed you choose which: by
+name ("ask DeepSeek…"), per route in `config.toml`, or a flat-rate subscription instead of per-token
+billing. Answers from pay-per-use models show what they cost, and the activity page totals it.
+
+### 2. Modular: turn on only what you use
+
+Messages, Notes, Reminders, Calendar, Home, asking models, the general agent and Claude Code are
+separate modules, each with a switch under `[modules]` in `config.toml`. Don't use Apple Home? Set
+`home = false`: home commands are refused with a notice and the agent loses its home tools. Home
+itself has pluggable backends: HomeKit, plus Hubitat as an option, behind one device catalog. Want
+Google Home? Write a third backend next to [`homekit.py`](src/ringrouter/homekit.py) and
+[`hubitat.py`](src/ringrouter/hubitat.py). A new feature is a router rule, a handler and a module
+entry (see [How it works](#how-it-works) and [`docs/PLAN.md`](docs/PLAN.md)).
+
+### 3. Built for a ring
+
+The ring is **input only**: a button and a microphone, with no screen, no speaker and no way to
+answer back. That shapes everything else:
+
+- **Holding the button is the intent.** What you say runs; there's no "are you sure?" dialog to read.
+- **Every result comes back as a [Pushcut](https://www.pushcut.io) notification on your phone**:
+  a receipt of what was sent or changed, an answer (with a **Full answer** page for long ones), or a
+  **Send / Cancel** / **Proceed** button when something needs a tap.
+- **Follow-ups are spoken too**: "Also tell her…", "Which of those is cheapest?", "Go ahead".
+- **A recording that arrives late** (the ring was out of range) asks before acting, because holding
+  the button meant *now*.
 
 ---
 
@@ -78,7 +120,7 @@ for a feature that's off is refused with a notice ("Calendar is turned off"), an
 loses that feature's tools too, so switching calendar off means nothing touches your calendar. The
 agent can use Notes, Reminders, Calendar, Home and the web, but it can never send a message.
 
-Three ideas hold it together:
+In practice:
 
 | | |
 | --- | --- |
