@@ -129,8 +129,12 @@ def _answer(ctx: Context, host: str, question: str, out: dict, *, title: str, pr
     sid = out.get("session_id")
     if sid:
         ctx.store.set_kv(SESSION_KEY.format(host=host), sid)
-    aid = ctx.llm_store.save_answer("claude_code", f"Claude Code on {display}", question,
-                                    Reply(text, [], f"Claude Code on {display}", cost=cost))
+    # Claude Code reports an API-price estimate on every run. On a Claude subscription (the default,
+    # [claude_code] billing = "subscription") nothing is charged: it only counts toward plan limits.
+    paid = cc.get("billing", "subscription") == "api"
+    label = f"Claude Code on {display}" + ("" if paid else " (subscription)")
+    aid = ctx.llm_store.save_answer("claude_code", label, question,
+                                    Reply(text, [], label, cost=cost if paid else None))
     buttons = [Button("Full answer", f"{ctx.public_url}/answers/{aid}")]
     proposals = PROPOSAL.findall(text)
     proposal = proposals[-1] if proposals and proposal_ok and h.get("allow_changes", True) and sid else None
@@ -143,7 +147,8 @@ def _answer(ctx: Context, host: str, question: str, out: dict, *, title: str, pr
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
     body = _summary(text, limit) + (f"\nProposed: {proposal}" if proposal else "")
     ctx.notify(title, body, buttons)
-    spent = f", ${cost:.3f}" if isinstance(cost, (int, float)) else ""
+    spent = "" if not isinstance(cost, (int, float)) else (
+        f", ${cost:.3f}" if paid else f", subscription (API-equivalent ~${cost:.2f})")
     state = "needs_confirm" if proposal else "done"
     return Result(state, f"claude on {host}: {_summary(text, 120)}" + (f" [proposal: {proposal}]" if proposal else "") + spent)
 

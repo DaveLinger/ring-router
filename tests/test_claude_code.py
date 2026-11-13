@@ -138,3 +138,10 @@ def test_host_not_set_up_says_so(ctx):
     res = say(ctx, "Ask Claude on the new VPS why the site is down")
     assert res.state == "refused" and not ctx.claude_runner.calls
     assert ctx.notifier.sent[-1].text == "Claude Code on Contabo VPS isn't set up yet: its SSH address isn't configured yet"
+
+
+def test_subscription_runs_show_no_cost(ctx):
+    res = say(ctx, "Ask Claude on the NAS why Plex is down")
+    assert "subscription (API-equivalent ~$0.02)" in res.summary
+    ctx.cfg.raw["claude_code"]["billing"] = "api"
+    assert say(ctx, "Ask Claude on the old VPS why it's slow").summary.endswith(", $0.020")

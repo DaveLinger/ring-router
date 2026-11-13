@@ -115,6 +115,8 @@ ssh_identity = ""                    # a dedicated key, e.g. "~/.ssh/ring-router
 timeout_s = 900                      # one run's limit
 max_turns = 30
 followup_window_s = 900              # follow-ups resume the session; Proceed / "go ahead" valid this long
+billing = "subscription"             # how the CLI is logged in: "subscription" (claude.ai; its cost figure is
+                                     # only an API-price estimate) or "api" (API key: the cost is real)
 
 [hosts.mac_mini]
 display = "Mac mini"
