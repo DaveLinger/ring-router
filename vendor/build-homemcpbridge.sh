@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Fetch HomeMCPBridge, apply ring-router's patch, and build it signed with your Apple ID team.
 #   vendor/build-homemcpbridge.sh <TEAM_ID>        (Xcode → Settings → Accounts; a free Personal Team works)
-# The patch adds HOMEMCP_HOMES (limit to one HomeKit home), control by exact device id, and a
+# The patch adds HOMEMCP_HOMES (limit to one HomeKit home), control by exact device id, Fan v2, HomeKit's
+# lock-mechanism characteristics (upstream used wrong IDs), and a
 # unique bundle id. Built app: vendor/HomeMCPBridge/build/Build/Products/Release-maccatalyst/
 set -euo pipefail
 team=${1:?usage: $0 <TEAM_ID>}

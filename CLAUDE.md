@@ -23,7 +23,7 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 | `/confirm` is POST only; "everything" skips outlets | A link preview must not act; a plug may be feeding a fridge. |
 | Hubitat calls go through `/usr/bin/curl`, not urllib | macOS Local Network privacy silently blocks the launchd-run Homebrew Python ("No route to host"). Curl under Ring Router.app gets through. |
 | A Swift launcher, `Ring Router.app`, wraps a Python service | One stable macOS identity for every privacy grant (Local Network, Calendars, Contacts, Automation, HomeKit). Signed with an Apple Development cert so grants survive rebuilds. |
-| Vendored, patched `mcp-macos` and HomeMCPBridge (`vendor/patches/`) | iCloud-only calendars (a Google account is mirrored in by calsync), one HomeKit home, lookup by exact device id, Fan v2 support. |
+| Vendored, patched `mcp-macos` and HomeMCPBridge (`vendor/patches/`) | iCloud-only calendars (a Google account is mirrored in by calsync), one HomeKit home, lookup by exact device id, Fan v2 support, HomeKit lock characteristics. |
 | Core is standard library only | Fewer moving parts on a headless box. `pydantic-ai` is imported only when the agent runs. |
 | `ask` vs `tell` | For messages: "ask" is rewritten into a direct question, "tell" is sent verbatim. For Claude Code and models they mean the same thing. |
 | Timers and alarms are refused | No substitute is acceptable to the owner (no Pushcut timers, no phone Shortcuts). |
@@ -54,6 +54,10 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 - Never print or commit secrets (`.env`), the real `config.toml`, phone numbers or addresses.
 - Don't rebuild `Ring Router.app` or HomeMCPBridge, or change launchd jobs, without asking. Rebuilds
   can reset macOS permissions that need someone at the screen.
+- Don't test HomeMCPBridge from a terminal or an assistant's shell, even through `Ring Router.app`:
+  macOS then holds the shell's app responsible for the HomeKit request, and the bridge crashes
+  ("without a usage description"). Run it under launchd (the live service, the self-test job, or a
+  one-shot job) so Ring Router is the responsible app.
 
 ## Can only be verified on the Mac
 
@@ -67,10 +71,6 @@ traffic). Code-level review can't confirm these. Flag assumptions instead.
 - **HomeKit fan speed:** RotationSpeed writes are acknowledged but ignored by the bridged fans, so
   Hubitat stays on for fan speeds.
 - **Cameras:** HomeMCPBridge snapshots crash on Catalyst.
-- **HomeKit-only locks don't work:** HomeMCPBridge reads and writes lock state with the wrong
-  characteristic IDs (`...19` / `...20`; HomeKit's are `HMCharacteristicTypeCurrentLockMechanismState`
-  and `HMCharacteristicTypeTargetLockMechanismState`), so lock, unlock and lock state fail with "No
-  lock characteristic". Fixing it means changing the bridge patch and rebuilding the bridge: ask first.
 - **Send delay / Undo Send:** deferred.
 - **Claude Code per host:** a stub (needs SSH to a VPS).
 - `live_recipients` still limits real sends to the owner.
