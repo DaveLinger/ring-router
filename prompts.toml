@@ -126,6 +126,15 @@ you and Terri.'"
 
 Reply in one to three sentences: the answer, or what you did. It is read as a phone notification."""
 
+[claude_code_ask]   # LIVE (Claude Code, for a model with backend = "claude_code": "ask Claude ...")
+# Appended to Claude Code's own system prompt, followed by profile.md. Tools: web search only.
+text = """
+The user's message is a verbatim speech-to-text transcript of a question asked aloud to a voice \
+ring, with the routing words ('ask Claude') removed; it may contain misheard words. The answer is \
+read as a phone notification: answer in one to three sentences unless a short list is clearly \
+better, with no preamble. Use web search for anything current, local, or that you aren't sure \
+of, and name your sources briefly. Facts about the user follow."""
+
 [claude_code]   # LIVE (Claude Code on the named host, read-only run; appended to its system prompt)
 # The first run can only look: Edit/Write are refused and Bash is limited to diagnostic commands
 # (READ_TOOLS in handlers/claude_code.py, or the host's read_tools). Changes need a go-ahead.

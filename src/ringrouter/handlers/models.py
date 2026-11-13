@@ -40,6 +40,12 @@ def h_llm(r: Route, ctx: Context) -> Result:
                 question = rewritten
         except Exception as e:
             log.warning("follow-up rewrite failed, sending as spoken: %s", e)
+    fell_back = ""
+    if m.get("backend") == "claude_code":     # covered by the Claude plan; OpenRouter if it can't answer
+        res, fell_back = _ask_claude_code(r, ctx, key, m, question)
+        if res is not None:
+            return res
+        name = f"{name} (via OpenRouter)"
     messages = ([{"role": "system", "content": system_prompt("llm_answer")}] + history
                 + [{"role": "user", "content": question}])
     try:
@@ -57,7 +63,55 @@ def h_llm(r: Route, ctx: Context) -> Result:
     ctx.notify(name, _short(reply.text, limit), buttons)
     follow = f", follow-up of {len(history) // 2}" if history else ""
     cost = f", ${reply.cost:.4f}" if reply.cost is not None else ""
-    return Result("done", f"{name} answered ({len(reply.text)} chars, {len(reply.citations)} sources{follow}{cost})")
+    why = f"; Claude Code didn't answer: {fell_back}" if fell_back else ""
+    return Result("done", f"{name} answered ({len(reply.text)} chars, {len(reply.citations)} sources{follow}{cost}{why})")
+
+
+ASK_SESSION = "ask_session:{key}"
+
+
+def _ask_claude_code(r: Route, ctx: Context, key: str, m: dict, question: str) -> tuple[Result | None, str]:
+    """'Ask Claude ...' through Claude Code on a host (default: the [hosts] default, i.e. this Mac),
+    on the Claude subscription: web search only, no files or shell. Follow-ups resume the session.
+    Returns (None, why) when it can't answer, so the caller asks OpenRouter instead."""
+    from .claude_code import command, parse_output  # noqa: PLC0415
+    hosts = ctx.cfg.raw.get("hosts", {})
+    host = m.get("claude_code_host") or next((k for k, h in hosts.items() if h.get("default")), None)
+    if not host or host not in hosts or hosts[host].get("not_ready") or not ctx.cfg.module_on("claude_code"):
+        return None, "no ready Claude Code host"
+    window = int(ctx.cfg.section("openrouter").get("followup_window_s", 600))
+    resume = ctx.store.get_kv(ASK_SESSION.format(key=key), window)
+    extra = "\n\n".join(p for p in (prompt("claude_code_ask"), load_profile()) if p)
+    args = ["-p", r.body if resume else question, "--output-format", "json",
+            "--model", m.get("claude_code_model", "sonnet"), "--max-turns", str(int(m.get("claude_code_max_turns", 6))),
+            "--tools", "WebSearch", "--allowedTools", "WebSearch", "--append-system-prompt", extra]
+    if resume:
+        args += ["--resume", resume]
+    try:
+        argv, cwd = command(ctx, host, args)
+        ctx.trace("command", target=f"claude -p ({key}) on {hosts[host].get('display', host)}", resumed=bool(resume))
+        out = parse_output(ctx.claude_runner(argv, cwd, int(m.get("claude_code_timeout_s", 120))),
+                           hosts[host].get("display", host))
+        text = str(out.get("result") or "").strip()
+        if out.get("is_error") or out.get("subtype", "success") != "success" or not text:
+            raise RuntimeError(text[:200] or str(out.get("subtype")))
+    except Exception as e:                      # plan limit, logged out, timeout, host down: use OpenRouter
+        log.warning("ask %s via Claude Code failed, using OpenRouter: %s", key, e)
+        ctx.trace("fallback", to="openrouter", reason=str(e)[:300])
+        return None, str(e)[:120]
+    if out.get("session_id"):
+        ctx.store.set_kv(ASK_SESSION.format(key=key), out["session_id"])
+    ctx.llm_store.remember(key, question, text)        # an OpenRouter fallback later keeps the thread
+    name = m.get("display", key)
+    label = f"{name} via Claude Code (subscription)"
+    aid = ctx.llm_store.save_answer("ask", label, question, Reply(text, [], label, cost=None))
+    limit = int(ctx.cfg.section("notify").get("max_chars", 300))
+    buttons = [Button("Full answer", f"{ctx.public_url}/answers/{aid}")] if len(md.plain(text)) > limit else []
+    ctx.notify(name, _short(text, limit), buttons)
+    est = out.get("total_cost_usd")
+    est = f", API-equivalent ~${est:.2f}" if isinstance(est, (int, float)) else ""
+    return Result("done", f"{name} answered via Claude Code ({len(text)} chars, subscription{est}"
+                          f"{', follow-up' if resume else ''})"), ""
 
 
 def h_research(r: Route, ctx: Context) -> Result:

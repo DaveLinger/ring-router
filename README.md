@@ -32,8 +32,8 @@ Every command climbs a ladder and stops at the first rung that can handle it:
 | --- | --- | --- | --- |
 | **1. Code only** | Deterministic routing and handlers | **$0**, instant | Most commands, end to end: "tell Terri…", lights, locks and fans, timed and location reminders, calendar dates and times, scenes, cancels |
 | **2. On-device model** | Apple Intelligence (`/usr/bin/fm`) | **$0**, offline, ~0.35 s | Small language jobs: "ask Terri when she'll be home" → "When will you be home?", note titles, splitting a shopping list, reminder titles, making a follow-up question stand alone |
-| **3. Subscription** | Claude Code on your own machines | Flat: your Claude plan | "Ask Claude on the home server why Plex is down", then "go ahead" to fix it |
-| **4. Pay per use** | Cloud models through OpenRouter | Cents per request | Open questions to the model you name (ChatGPT, Claude, DeepSeek, Qwen), research, web search, and the general agent for anything that matches no fixed command |
+| **3. Subscription** | Claude Code on your own machines | Flat: your Claude plan | "Ask Claude on the home server why Plex is down", then "go ahead" to fix it; and "ask Claude …" itself, answered by Claude Code on the Mac (OpenRouter takes over if the plan limit is hit) |
+| **4. Pay per use** | Cloud models through OpenRouter | Cents per request | Open questions to the model you name (ChatGPT, DeepSeek, Qwen; Claude when the subscription can't), research, and the general agent for anything that matches no fixed command |
 
 A cloud model is never in the path of a fixed command, and when one is needed you choose which: by
 name ("ask DeepSeek…"), per route in `config.toml`, or a flat-rate subscription instead of per-token
@@ -460,6 +460,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Lock and door read-back (`[home] read_back`) | ✅ Live: "Laundry Room Door locked (confirmed)" / "unlocked (confirmed)" end to end (still off by default) |
 | HomeKit fan speeds, device and room nicknames | ✅ Live: low / medium / high verified on all four ceiling fans; "set the guest bedroom fan to high" etc. run end to end |
 | Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | ✅ Live on all four hosts, including Proceed and "go ahead" |
+| "Ask Claude" through Claude Code on the subscription (`[models.claude] backend = "claude_code"`) | ✅ Live: an answer and a follow-up in the same session, about $0.01 of plan usage each; falls back to OpenRouter on any failure (tested with fakes) |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the
 roadmap. Notes for AI assistants working in this repo are in [CLAUDE.md](CLAUDE.md).

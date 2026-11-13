@@ -97,18 +97,20 @@ def run_claude(ctx: Context, host: str, message: str, *, resume: str | None, cha
     argv, cwd = command(ctx, host, args)
     ctx.trace("command", target=f"claude -p on {h.get('display', host)}", changes=changes, resumed=bool(resume),
               via="ssh " + h["ssh"] if h.get("ssh") else "local")
-    p = ctx.claude_runner(argv, cwd, int(cc.get("timeout_s", 900)))
-    out = None
+    return parse_output(ctx.claude_runner(argv, cwd, int(cc.get("timeout_s", 900))), h.get("display", host))
+
+
+def parse_output(p: subprocess.CompletedProcess, display: str) -> dict:
+    """The JSON result line of `claude -p --output-format json` (other output before it is ignored)."""
     for line in reversed(p.stdout.strip().splitlines()):
         try:
             out = json.loads(line)
-            break
         except ValueError:
             continue
-    if not isinstance(out, dict):
-        err = (p.stderr or p.stdout or f"exit {p.returncode}").strip()[-400:]
-        raise RuntimeError(f"Claude Code on {h.get('display', host)} didn't answer: {err}")
-    return out
+        if isinstance(out, dict):
+            return out
+    err = (p.stderr or p.stdout or f"exit {p.returncode}").strip()[-400:]
+    raise RuntimeError(f"Claude Code on {display} didn't answer: {err}")
 
 
 def default_runner(argv: list[str], cwd: str | None, timeout_s: int) -> subprocess.CompletedProcess:

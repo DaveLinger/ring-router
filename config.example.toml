@@ -79,6 +79,9 @@ model = "openai/gpt-6.1-terra"
 display = "Claude"
 spoken = ["claude", "clod", "cloud"]
 model = "anthropic/claude-sonnet-5.5"
+# backend = "claude_code"    # answer with Claude Code on the [hosts] default host, on your Claude
+#                            # plan instead of per-token billing; OpenRouter if it can't (plan limit,
+#                            # logged out). Web search only. claude_code_model = "sonnet" (default).
 
 [models.deepseek]
 display = "DeepSeek"

@@ -472,6 +472,15 @@ question), with context we keep ourselves.
   ("ask DeepSeek more about that" continues the thread; the on-device model first rewrites a
   follow-up into a standalone question so the web search finds the right thing), and OpenRouter's `web` plugin (3 results for
   "ask", 8 for research; ~$0.005–0.007 per search).
+- **"Ask Claude" on the subscription:** `[models.<key>] backend = "claude_code"` answers through Claude
+  Code on the default host (this Mac) instead of OpenRouter: `claude -p --model sonnet --tools WebSearch`
+  (no files, no shell), the `claude_code_ask` prompt plus `profile.md` appended to Claude Code's own
+  prompt. Follow-ups resume the session. Any failure (plan limit reached, logged out, timeout) falls
+  back to OpenRouter for that question, and the notification says "(via OpenRouter)". Measured
+  2026-11-12 (API-equivalent, not billed): a plain question ~$0.003–0.01, 2–3 s; one with a web search
+  ~$0.27 on Sonnet and ~$0.48 on Opus, 14–20 s, almost all of it the ~55k tokens of search results.
+  Replacing Claude Code's prompt with a short one (`--system-prompt`) saved little once its prompt is
+  cached, and WebFetch (whole pages) costs more, so it's left out.
 - **Answers:** the notification shows up to 300 characters. Longer answers, or any with sources, get a
   **Full answer** button that opens `/answers/<id>` on the listener: a phone-friendly page with the
   question, answer, sources, model and cost. The ID is an unguessable token.

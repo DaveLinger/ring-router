@@ -140,3 +140,65 @@ def test_answer_page_served(cfg, fake_fm):
             urllib.request.urlopen(f"{base}/answers/nope")
     finally:
         httpd.shutdown()
+
+
+# ------------------------------------------- "ask Claude" through Claude Code (subscription) --
+
+class FakeClaudeCLI:
+    def __init__(self, *replies):
+        self.calls, self.replies = [], list(replies)
+
+    def __call__(self, argv, cwd, timeout_s):
+        import json
+        import subprocess
+        self.calls.append(argv)
+        r = self.replies.pop(0) if self.replies else {"result": "Canberra.", "session_id": "A1"}
+        if isinstance(r, Exception):
+            raise r
+        body = {"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.004, **r}
+        return subprocess.CompletedProcess(argv, 0, json.dumps(body) + "\n", "")
+
+
+@pytest.fixture
+def cc(ctx):
+    ctx.cfg.raw["models"]["claude"]["backend"] = "claude_code"
+    ctx.claude_runner = FakeClaudeCLI()
+    return ctx
+
+
+def test_ask_claude_uses_claude_code_on_the_subscription(cc):
+    res = h_llm(route("Ask Claude what the capital of Australia is", cc.cfg), cc)
+    assert res.state == "done" and "via Claude Code" in res.summary and "subscription" in res.summary
+    assert not cc.llm.calls                                       # OpenRouter not used
+    argv = cc.claude_runner.calls[0]
+    assert argv[0] == "claude" and argv[argv.index("--tools") + 1] == "WebSearch"
+    assert argv[argv.index("--model") + 1] == "sonnet" and "Bash" not in argv
+    assert cc.notifier.sent[-1].title == "Claude" and cc.notifier.sent[-1].text == "Canberra."
+
+
+def test_ask_claude_follow_up_resumes_the_session(cc):
+    h_llm(route("Ask Claude for the best Chinese restaurants in Fairmont", cc.cfg), cc)
+    h_llm(route("Ask Claude which one is cheapest", cc.cfg), cc)
+    argv = cc.claude_runner.calls[1]
+    assert argv[argv.index("--resume") + 1] == "A1" and argv[argv.index("-p") + 1] == "which one is cheapest"
+
+
+@pytest.mark.parametrize("failure", [
+    {"result": "Claude AI usage limit reached", "is_error": True, "session_id": "A1"},
+    RuntimeError("claude: not logged in")])
+def test_ask_claude_falls_back_to_openrouter(cc, failure):
+    cc.claude_runner = FakeClaudeCLI(failure)
+    res = h_llm(route("Ask Claude what the capital of Australia is", cc.cfg), cc)
+    assert res.state == "done" and len(cc.llm.calls) == 1
+    assert "Claude Code didn't answer" in res.summary and cc.notifier.sent[-1].title == "Claude (via OpenRouter)"
+
+
+def test_ask_claude_skips_claude_code_when_its_host_is_not_ready(cc):
+    cc.cfg.raw["hosts"]["mac_mini"]["not_ready"] = "not installed"
+    h_llm(route("Ask Claude what the capital of Australia is", cc.cfg), cc)
+    assert not cc.claude_runner.calls and len(cc.llm.calls) == 1
+
+
+def test_other_models_still_use_openrouter(cc):
+    h_llm(route("Ask ChatGPT what the capital of Australia is", cc.cfg), cc)
+    assert not cc.claude_runner.calls and len(cc.llm.calls) == 1
