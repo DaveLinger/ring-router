@@ -78,7 +78,7 @@ def test_agent_answers_questions_from_read_tools(cfg):
 
 
 def test_agent_messages_read_opt_in_but_never_send(cfg):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     cfg.raw.setdefault("agents", {})["read_messages"] = True
     mcp, executed = fake_macos()
     model, seen = scripted(("messages_chat", {"action": "create", "text": "hi", "to": "+1555"}))
@@ -105,8 +105,7 @@ def test_general_agent_dry_run_does_not_execute_writes(cfg):
 
 
 def test_general_agent_live_executes_writes(cfg):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     mcp, executed = fake_macos()
     model, _ = scripted(("reminders_tasks", {"action": "create", "title": "Renew registration"}))
     text, spec = run_agent("general", "add renew registration to my reminders", cfg, model=model, mcp_source=mcp)
@@ -114,8 +113,7 @@ def test_general_agent_live_executes_writes(cfg):
 
 
 def test_general_agent_creates_contact(cfg):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     mcp, executed = fake_macos()
     model, _ = scripted(("contacts_people", {"action": "create", "search": "John Smith 555-1212"}))
     text, spec = run_agent("general", "make a new contact named John Smith with phone number 555-1212",
@@ -124,7 +122,7 @@ def test_general_agent_creates_contact(cfg):
 
 
 def test_general_agent_blocks_contact_delete(cfg):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     mcp, executed = fake_macos()
     model, _ = scripted(("contacts_people", {"action": "delete", "search": "Instinct"}))
     text, spec = run_agent("general", "delete Instinct from my contacts", cfg, model=model, mcp_source=mcp)

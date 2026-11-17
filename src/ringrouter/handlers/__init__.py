@@ -40,6 +40,8 @@ SLOW_CONFIRMS = {"claude_code"}      # a Proceed tap that starts minutes of work
 # was out of range, the phone was offline) asks first instead of running: holding the button meant
 # "now", not "whenever this arrives".
 LATE_CONFIRM_ROUTES = {"imessage", "imessage_followup", "imessage_contact", "home", "scene", "claude_code_proceed"}
+# Routes that do nothing, so test mode ([server] test_mode) never holds them for a Proceed tap.
+NEVER_HELD = {"discard", "cancelled", "refuse"}
 
 
 # [modules]: each feature can be switched off. A route belongs to the module(s) it needs; research

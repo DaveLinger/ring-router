@@ -44,8 +44,7 @@ def mac():
 @pytest.fixture
 def live_app(cfg, fake_fm, mac):
     """A live-mode App (no dry run) over the fake Mac; Terri has a pinned number."""
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     cfg.raw["recipients"]["terri"]["handle"] = "+15550100123"
     return App(cfg, store=Store(":memory:"), notifier=ConsoleNotifier(echo=False), fm=fake_fm, mcp_call=mac,
                background=False)
@@ -134,7 +133,7 @@ DEVICES = [{"id": 16, "label": "Living Room Overhead Light", "room": "Living Roo
 
 
 def home_ctx(cfg, fake_fm, broken=()):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     calls = []
 
     def fetch(path):
@@ -212,6 +211,6 @@ def test_expired_confirmation_cannot_be_run(live_app, mac):
 def test_run_never_raises(cfg, fake_fm):
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   mcp_call=lambda *a: (_ for _ in ()).throw(MCPError("boom")))
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     for say in ("Make a note: x", "Add milk to my shopping list", "Remind me at 5 to call the vet"):
         assert run(route(say, cfg), ctx).state == "failed"

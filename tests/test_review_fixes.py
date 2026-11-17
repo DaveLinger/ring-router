@@ -50,7 +50,7 @@ def test_backend_down_is_not_reported_as_no_such_device(cfg, fake_fm):
         def devices(self, refresh=False):
             raise RuntimeError("HomeMCPBridge: no reply within 60s")
 
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     home = Home(None, DownHomeKit())
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   hubitat_factory=lambda c: home)
@@ -235,7 +235,7 @@ def test_one_exclude_list_covers_every_backend(cfg, fake_fm, monkeypatch):
 
 
 def test_everything_leaves_outlets_alone_but_a_named_outlet_works(cfg, fake_fm):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     calls = []
     home = Home(None, homekit(calls))
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
@@ -250,7 +250,7 @@ def test_everything_leaves_outlets_alone_but_a_named_outlet_works(cfg, fake_fm):
 def test_scene_that_half_runs_is_partial(cfg, fake_fm):
     from ringrouter.handlers import h_scene
     from ringrouter.hubitat import Hubitat
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     devs = [{"id": 1, "label": "Hall Light", "room": "Hall", "capabilities": ["Switch"]},
             {"id": 2, "label": "Front Door", "room": "Hall", "capabilities": ["Lock"]}]
 
@@ -271,7 +271,7 @@ def test_scene_that_half_runs_is_partial(cfg, fake_fm):
 
 def test_open_the_door_asks_which_instead_of_opening_the_garage(cfg, fake_fm):
     from ringrouter.hubitat import Hubitat
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     calls = []
     devs = [{"id": 70, "label": "Garage Door", "room": "Garage", "capabilities": ["GarageDoorControl"]}]
     hub = Hubitat("x", "1", "t", fetch=lambda p: devs if p == "/devices/all" else calls.append(p) or {})

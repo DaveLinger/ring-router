@@ -61,7 +61,7 @@ def cmd_route(args) -> int:
     from .server import App  # noqa: PLC0415
     from .store import Store  # noqa: PLC0415
     cfg = load_config(args.config)
-    cfg.raw.setdefault("server", {})["dry_run"] = True  # offline routing never acts
+    cfg.dry_run = True  # offline routing never acts
     app = App(cfg, store=Store(":memory:"), background=False)
     from .notify import ConsoleNotifier  # noqa: PLC0415
     app.notifier = ConsoleNotifier()

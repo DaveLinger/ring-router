@@ -45,6 +45,8 @@ class Context:
     address_lookup: Callable = field(default=None)   # (label="home") -> address on the Contacts My Card
     claude_runner: Callable = field(default=None)    # (argv, cwd, timeout_s) -> CompletedProcess
     people_loader: Callable = field(default=None)    # () -> [people.Person]: Contacts + recent Messages
+    force_dry: bool = False              # test mode's preview run: every route is a dry run
+    held: list | None = None             # test mode's preview run: notices are kept here, not sent
 
     def __post_init__(self):
         if self.mcp_call is None:
@@ -75,7 +77,7 @@ class Context:
         self.fm = _TracedFM(self, self.fm)
 
     def dry(self, route: str) -> bool:
-        return self.cfg.is_dry_run(route)
+        return self.force_dry or self.cfg.is_dry_run(route)
 
     def spoken_at(self) -> datetime | None:
         """Local time the words were spoken (None if unknown): the "now" for "in 20 minutes"."""
@@ -88,8 +90,11 @@ class Context:
             log.debug("trace failed", exc_info=True)
 
     def notify(self, title: str, text: str, buttons: list[Button] | None = None) -> None:
-        self.trace("notification", title=title, text=text,
+        self.trace("notification", title=title, text=text, held=self.held is not None,
                    buttons=[{"label": b.label, "url": b.url, "background": b.background} for b in buttons or []])
+        if self.held is not None:
+            self.held.append(Notice(title, text, buttons or []))
+            return
         self.notifier.send(Notice(title, text, buttons or []))
 
 

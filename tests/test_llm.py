@@ -92,8 +92,7 @@ def test_research_dry_run_saves_answer_not_note(ctx, cfg):
 
 
 def test_research_live_writes_note_with_sources(ctx, cfg):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     ctx.llm = FakeLLM("Bottom line: buy X.\n\n## Picks\n- **X** is best", [{"title": "Review", "url": "https://r.example"}])
     res = h_research(route("Research with DeepSeek the best robot vacuum", cfg), ctx)
     assert res.state == "done" and ctx.llm.calls[-1]["model"] == "deepseek/deepseek-v4.1-flash"

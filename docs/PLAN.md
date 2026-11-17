@@ -67,7 +67,7 @@ Adapted from [th3walkingdud3/peeble-ring-router](https://github.com/th3walkingdu
    Every mcp-macos / HomeMCPBridge call from the fixed routes has a hard 60-second limit (the server
    is killed), so a privacy prompt nobody can click doesn't hang the request. (The agent's own MCP
    session uses Pydantic AI's 180-second tool timeout.)
-7. Global and per-route dry run, plus a simulator that sends signed fake requests.
+7. Test mode (every command waits for a Proceed tap), plus a simulator that sends signed fake requests.
 
 **What we add:** slow routes (models, agents) store the job, reply `200 accepted` immediately, and
 finish in the background; the result arrives by Pushcut.
@@ -78,6 +78,17 @@ rather than run: holding the button meant "now". Other routes run, and reminder 
 are worked out from the spoken time. A `recordedAt` that is missing or not believable (the future,
 over a month old) is ignored. *Assumption until real ring traffic is seen: the field is Unix
 milliseconds and the ring can deliver recordings late.* Test with `ring-router sim --recorded-ago 3600`.
+
+**Test mode:** `[server] test_mode = true` holds every command that would do something. Fast routes
+run as a dry run with their notices kept back, so the hold shows the exact rewrite, recipient and
+times. Model, agent and Claude Code routes aren't run at all, because asking them already sends the
+words out (and would cost money twice). One "Test mode" notification has **Proceed / Cancel**.
+Proceed puts the transcript back through the pipeline live, keeping the spoken time and skipping
+the old-recording hold (the tap is fresh intent). The live run is recomputed rather than replayed.
+`fm --greedy` makes the rewrite the same, but a Contacts ranking could change in between.
+Test mode replaced the old `[server] dry_run` / `dry_run_routes` settings. Dry run is now internal
+(`Config.dry_run`: test-mode previews, `ring-router route`, the tests), and a config that still says
+`dry_run = true` starts in test mode, never live.
 
 ---
 
@@ -534,7 +545,7 @@ Anyone who could fake this webhook could text your contacts or unlock your door.
 
 ## Build phases
 
-Every route starts in dry run until you've watched it behave.
+Everything starts in test mode until you've watched it behave.
 
 | Phase | Scope | Done when |
 | --- | --- | --- |

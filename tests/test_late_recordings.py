@@ -25,7 +25,7 @@ def front_door(monkeypatch):
 
 def test_old_unlock_is_held_until_run_is_tapped(server, cfg, front_door):  # noqa: F811
     base, app, notifier = server
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     (code, text), _ = send(base, "Unlock the front door", recorded_at_ms=ago_ms(3 * 3600))
     n = notifier.sent[-1]
     assert code == 200 and "needs_confirm" in text and "recorded 3 h ago" in text
@@ -38,7 +38,7 @@ def test_old_unlock_is_held_until_run_is_tapped(server, cfg, front_door):  # noq
 
 def test_old_recording_can_be_cancelled(server, cfg, front_door):  # noqa: F811
     base, app, notifier = server
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     send(base, "Unlock the front door", recorded_at_ms=ago_ms(900))
     assert post(notifier.sent[-1].buttons[1].url, {}, b"") == (200, "cancelled\n") and front_door == []
 
@@ -51,7 +51,7 @@ def test_old_message_is_held(server):  # noqa: F811
 
 def test_fresh_and_slightly_late_commands_run(server, cfg, front_door):  # noqa: F811
     base, _, _ = server
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     send(base, "Unlock the front door")
     send(base, "Unlock the front door", recorded_at_ms=ago_ms(120))
     assert front_door == ["/devices/67/unlock"] * 2
@@ -59,14 +59,15 @@ def test_fresh_and_slightly_late_commands_run(server, cfg, front_door):  # noqa:
 
 def test_gate_can_be_turned_off(server, cfg, front_door):  # noqa: F811
     base, _, _ = server
-    cfg.raw["server"].update(dry_run=False, max_recording_age_s=0)
+    cfg.dry_run = False
+    cfg.raw["server"]["max_recording_age_s"] = 0
     send(base, "Unlock the front door", recorded_at_ms=ago_ms(3 * 3600))
     assert front_door == ["/devices/67/unlock"]
 
 
 def test_unreadable_recorded_time_is_ignored(server, cfg, front_door):  # noqa: F811
     base, _, _ = server
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     send(base, "Unlock the front door", recorded_at_ms=12345)             # 1970: not believable
     assert front_door == ["/devices/67/unlock"]
 

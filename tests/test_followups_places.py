@@ -79,8 +79,7 @@ def test_a_rerouted_pronoun_message_still_asks(ctx):
 
 @pytest.fixture
 def live(ctx, tmp_path):
-    ctx.cfg.raw["server"]["dry_run"] = False
-    ctx.cfg.raw["server"]["dry_run_routes"] = []
+    ctx.cfg.dry_run = False
     calls = tmp_path / "calls.json"
     helper = tmp_path / "georeminder"
     helper.write_text(f"""#!/usr/bin/env python3

@@ -19,7 +19,7 @@ def with_hub(ctx):
     calls = []
     hub = Hubitat("x", "1", "t", fetch=lambda p: DEVICES if p == "/devices/all" else calls.append(p) or {})
     ctx.hubitat_factory = lambda c: hub
-    ctx.cfg.raw["server"]["dry_run"] = False
+    ctx.cfg.dry_run = False
     return calls
 
 
@@ -88,8 +88,7 @@ def test_rerouted_home_confirmation_is_configurable(cfg, fake_fm):
 # --------------------------------------------------------- write intent ----
 
 def live(cfg):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     return cfg
 
 
@@ -171,7 +170,7 @@ def test_runaway_agent_is_reported_not_silent(cfg, fake_fm):
 
 def test_agent_that_fails_after_changing_something_is_partial(cfg, fake_fm):
     """So the same delivery is never run again, and the owner is told what already happened."""
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     cfg.raw.setdefault("agents", {})["max_requests"] = 3
     ctx, _ = reroute_ctx(cfg, fake_fm, [("reminders_tasks", {"action": "create", "title": "Bring forms"})]
                          + [("calendar_events", {"action": "read"})] * 10)

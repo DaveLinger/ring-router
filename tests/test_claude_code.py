@@ -27,8 +27,7 @@ class FakeClaude:
 
 @pytest.fixture
 def ctx(cfg, fake_fm):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     cfg.raw["claude_code"] = {"ssh_identity": "~/.ssh/rr_key", "followup_window_s": 900}
     c = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                 claude_runner=FakeClaude(), public_url="https://x.example")
@@ -122,7 +121,7 @@ def test_no_json_means_failed(ctx):
 
 
 def test_dry_run_runs_nothing(ctx):
-    ctx.cfg.raw["server"]["dry_run"] = True
+    ctx.cfg.dry_run = True
     assert say(ctx, "Ask Claude on the NAS why Plex is down").state == "dry_run" and not ctx.claude_runner.calls
 
 

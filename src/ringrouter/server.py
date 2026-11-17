@@ -104,11 +104,11 @@ class App:
                        agent_runner=self.agent_runner)
 
     def process(self, delivery_id: str, transcript: str, recorded_at: float | None = None,
-                allow_late: bool = False) -> tuple[int, str]:
+                allow_late: bool = False, tested: bool = False) -> tuple[int, str]:
         """Route + handle one authenticated, de-duplicated transcript.
 
         recorded_at: when it was spoken (Unix s), if known. allow_late: the owner tapped "Run" on
-        an old recording, so don't hold it again.
+        an old recording, so don't hold it again. tested: the owner tapped "Proceed" in test mode.
         """
         if time.time() - self.pruned_at > 86400:
             self.prune()
@@ -120,6 +120,8 @@ class App:
                   slow=r.route in handlers.SLOW_ROUTES, dry_run=self.cfg.is_dry_run(r.route))
         log.info("delivery %s: %s", delivery_id[:8], r.describe())
         self.store.set_state(delivery_id, "received", transcript=r.transcript, route=r.route)
+        if self.cfg.server.get("test_mode") and not tested and r.route not in handlers.NEVER_HELD:
+            return self._hold_test(ctx, r, transcript, recorded_at)
         age = time.time() - recorded_at if recorded_at else 0
         max_age = int(self.cfg.server.get("max_recording_age_s", 300))
         if r.route in handlers.LATE_CONFIRM_ROUTES and not allow_late and 0 < max_age < age:
@@ -146,6 +148,45 @@ class App:
         ctx.notify("Old recording", f"Recorded {_ago(age)} ago: \u201c{r.transcript}\u201d. Run it now?",
                    [handlers.Button("Run", f"{self.public_url}/confirm/{pid}/yes", background=True),
                     handlers.Button("Cancel", f"{self.public_url}/confirm/{pid}/no", background=True)])
+        self.store.set_state(ctx.delivery_id, "needs_confirm", summary=summary)
+        ctx.trace("response", http_status=200, body=f"needs_confirm: [{r.route}] {summary}")
+        log.info("delivery %s: %s", ctx.delivery_id[:8], summary)
+        return 200, f"needs_confirm: [{r.route}] {summary}"
+
+    def _hold_test(self, ctx: Context, r, transcript: str, recorded_at: float | None) -> tuple[int, str]:
+        """Test mode: work out what this would do, say so, and do it only after a Proceed tap.
+
+        Fast routes run as a dry run (rewrite, recipient, items, times), with their notices kept back.
+        Model, agent and Claude Code routes aren't run at all: asking them already sends the words out."""
+        preview: list = []
+        if r.route in handlers.SLOW_ROUTES:
+            extra = ", ".join(f"{k}={v}" for k, v in r.params.items() if v not in (None, "", False))
+            res = Result("dry_run", f"would run {r.route}{f' ({extra})' if extra else ''}: {r.body or r.transcript!r}")
+        else:
+            ctx.force_dry, ctx.held = True, preview
+            try:
+                res = handlers.run(r, ctx)
+            finally:
+                ctx.force_dry, ctx.held = False, None
+        if res.state not in ("dry_run", "needs_confirm"):     # refused, discarded, failed: nothing to proceed with
+            for n in preview:
+                self.notifier.send(handlers.Notice(n.title, n.text))
+            self.store.set_state(ctx.delivery_id, res.state, summary=res.summary)
+            ctx.trace("result", state=res.state, summary=res.summary, test_mode=True)
+            ctx.trace("response", http_status=res.http_status, body=f"{res.state}: [{r.route}] {res.summary}")
+            return res.http_status, f"{res.state}: [{r.route}] {res.summary}"
+        # The Proceed run counts dates from when it was spoken, even if the ring didn't say when that was.
+        pid = self.store.add_pending(ctx.delivery_id, "test", {
+            "delivery_id": ctx.delivery_id, "transcript": transcript, "recorded_at": recorded_at or time.time()},
+            self.cfg.section("notify").get("confirm_ttl_s", 300))
+        would = res.summary.removeprefix("DRY RUN: ")
+        lines = [f"Heard: \u201c{r.transcript}\u201d", f"Route: {r.route}"]
+        lines += [n.text for n in preview] or [would[:1].upper() + would[1:]]
+        ctx.trace("test_hold", route=r.route, would=res.summary, confirmation=pid)
+        ctx.notify("Test mode", "\n".join(lines),
+                   [handlers.Button("Proceed", f"{self.public_url}/confirm/{pid}/yes", background=True),
+                    handlers.Button("Cancel", f"{self.public_url}/confirm/{pid}/no", background=True)])
+        summary = f"test mode: {would} (held for Proceed {pid})"
         self.store.set_state(ctx.delivery_id, "needs_confirm", summary=summary)
         ctx.trace("response", http_status=200, body=f"needs_confirm: [{r.route}] {summary}")
         log.info("delivery %s: %s", ctx.delivery_id[:8], summary)
@@ -209,6 +250,9 @@ class App:
         if kind == "late":      # an old recording the owner chose to run: back through the pipeline
             return self.process(payload["delivery_id"], payload["transcript"], payload.get("recorded_at"),
                                 allow_late=True)
+        if kind == "test":      # Proceed in test mode: run it for real (the tap is fresh, so no late hold)
+            return self.process(payload["delivery_id"], payload["transcript"], payload.get("recorded_at"),
+                                allow_late=True, tested=True)
         ctx = self.ctx(did or f"confirm-{pid}")
         ctx.trace("confirmed", kind=kind)
         if kind in handlers.SLOW_CONFIRMS and self.pool:      # minutes of work: answer the tap now
@@ -363,7 +407,7 @@ def serve(cfg: Config) -> None:
     app = App(cfg)
     host, port = cfg.server.get("host", "127.0.0.1"), int(cfg.server.get("port", 8642))
     httpd = ThreadingHTTPServer((host, port), make_handler(app))
-    mode = "DRY RUN" if cfg.server.get("dry_run", True) else "LIVE"
+    mode = "TEST MODE: everything waits for Proceed" if cfg.server.get("test_mode") else "LIVE"
     log.info("ring-router listening on http://%s:%d (%s, notify=%s)", host, port, mode,
              type(app.notifier).__name__)
     try:

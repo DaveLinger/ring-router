@@ -43,7 +43,7 @@ class FakeHub:
 
 
 def live_ctx(cfg, fake_fm, fake, **home_cfg):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     cfg.raw["home"] = {"confirm_actions": [], "read_back_every_s": 0, **home_cfg}
     hub = Hubitat("x", "1", "t", fetch=fake)
     return Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
@@ -130,7 +130,7 @@ def test_home_status_by_device_and_by_room(cfg, fake_fm):
 def agent_ctx(cfg, fake_fm, steps, fake=None, **home_cfg):
     ctx, _ = reroute_ctx(cfg, fake_fm, steps)
     fake = fake or FakeHub()
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     cfg.raw["home"] = {"confirm_actions": [], "read_back_every_s": 0, **home_cfg}
     hub = Hubitat("x", "1", "t", fetch=fake)
     ctx.hubitat_factory = lambda c: hub
@@ -181,7 +181,7 @@ def test_agent_device_actions_are_capped_and_use_the_matcher(cfg, fake_fm):
 
 def test_agent_home_tools_respect_dry_run_and_can_be_turned_off(cfg, fake_fm):
     ctx, fake = agent_ctx(cfg, fake_fm, [("home_control", {"action": "off", "target": "kitchen lights"})])
-    cfg.raw["server"]["dry_run"] = True
+    cfg.dry_run = True
     assert h_agent(route("Kitchen lights off", cfg), ctx, "general").state == "dry_run" and fake.calls == []
     cfg.raw.setdefault("agents", {})["home_tools"] = False
     offered = []

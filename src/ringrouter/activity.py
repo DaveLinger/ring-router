@@ -25,6 +25,7 @@ PHASES = {
     "read_back": ("Read-back", "The lock or door was asked what state it ended up in"),
     "home_status": ("Device state", "What the agent was told when it asked about devices"),
     "late_recording": ("Old recording held", "Spoken too long ago to act on without asking; waiting for a Run tap"),
+    "test_hold": ("Test mode hold", "Worked out what it would do without doing it; waiting for a Proceed tap"),
     "message_composed": ("Message composed", "The exact text that will be sent"),
     "on_device_model": ("Apple on-device model", "/usr/bin/fm: input → output"),
     "model_request": ("Sent to model", "OpenRouter request"),

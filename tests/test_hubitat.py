@@ -113,8 +113,7 @@ def test_target_of():
 
 @pytest.fixture
 def ctx(cfg, fake_fm, hub):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     return Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                    hubitat_factory=lambda c: hub)
 
@@ -136,7 +135,7 @@ def test_handler_ambiguous_changes_nothing(ctx, hub):
 
 
 def test_handler_dry_run(ctx, hub):
-    ctx.cfg.raw["server"]["dry_run"] = True
+    ctx.cfg.dry_run = True
     res = h_home(route("Turn off the office light", ctx.cfg), ctx)
     assert res.state == "dry_run" and hub.fake.calls == []
 

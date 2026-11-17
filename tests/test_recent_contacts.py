@@ -113,7 +113,7 @@ def test_choices_are_capped():
 # ----------------------------------------------------------------- handler --
 
 def make_ctx(cfg, fake_fm, everyone, agent=None):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     cfg.raw["server"].pop("live_recipients", None)
     calls = []
 

@@ -93,8 +93,7 @@ def test_front_door_resolves_to_homekit_lock(home):
 
 @pytest.fixture
 def ctx(cfg, fake_fm, home):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     return Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                    hubitat_factory=lambda c: home)
 

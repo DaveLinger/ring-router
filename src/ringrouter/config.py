@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from dataclasses import dataclass, field
@@ -16,12 +17,17 @@ ENV_FILE = PROJECT_DIR / ".env"
 DEFAULT_CONFIG = PROJECT_DIR / "config.toml"
 EXAMPLE_CONFIG = PROJECT_DIR / "config.example.toml"
 
+log = logging.getLogger(__name__)
+
 
 @dataclass
 class Config:
     raw: dict[str, Any]
     path: Path
     secrets: dict[str, str] = field(default_factory=dict)
+    # Not a config.toml setting: `ring-router route` and the tests run handlers without side effects.
+    # The service's safety switch is [server] test_mode (worked out, then waits for Proceed).
+    dry_run: bool = False
 
     # convenient accessors -------------------------------------------------
     def section(self, name: str) -> dict[str, Any]:
@@ -40,9 +46,7 @@ class Config:
         return bool(self.raw.get("modules", {}).get(name, True))
 
     def is_dry_run(self, route: str) -> bool:
-        if self.server.get("dry_run", True):
-            return True
-        return route in self.server.get("dry_run_routes", [])
+        return self.dry_run
 
     def secret(self, name: str) -> str | None:
         return self.secrets.get(name)
@@ -53,6 +57,12 @@ def load_config(path: str | os.PathLike | None = None, *, load_secrets: bool = T
     with open(p, "rb") as f:
         raw = tomllib.load(f)
     cfg = Config(raw=raw, path=p)
+    server = raw.get("server", {})
+    if "dry_run" in server or "dry_run_routes" in server:   # replaced by test_mode
+        if server.get("dry_run") or server.get("dry_run_routes"):
+            server["test_mode"] = True          # an old "don't act" setting must never quietly go live
+        log.warning("[server] dry_run / dry_run_routes are gone; using test_mode = %s. Remove them from %s.",
+                    bool(server.get("test_mode")), p.name)
     if load_secrets:
         cfg.secrets = read_secrets()
     return cfg

@@ -39,6 +39,8 @@ def cfg(monkeypatch):
         monkeypatch.setenv(f"RING_ROUTER_{n}", "")
     c = load_config(EXAMPLE_CONFIG)
     c.secrets = {"path_token": "testpath", "signing_secret": "testsecret", "activity_token": "acttoken"}
+    c.dry_run = True                        # handlers report what they would do; tests opt in to acting
+    c.raw["server"]["test_mode"] = False    # test_test_mode.py turns it on
     return c
 
 

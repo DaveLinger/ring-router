@@ -29,6 +29,7 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 | `ask` vs `tell` | For messages: "ask" is rewritten into a direct question, "tell" is sent verbatim. For Claude Code and models they mean the same thing. |
 | Claude Code's first run can only look; changes need "go ahead" / Proceed | The command is a voice transcript; a misheard word shouldn't restart a server. The proceed run resumes the same session with the host's change tools. "Go ahead" acts only on the one proposal waiting (15 min). |
 | `[modules]` switches refuse a feature's commands instead of letting them fall through | "Add X to my calendar" with calendar off should say so, not wander into the agent. The agent loses that module's tools too (`MODULE_OF_TOOL` in agents.py, home tools in models.py). |
+| `[server] test_mode` re-runs the transcript on Proceed instead of replaying the preview | One code path for live actions; the preview is a forced dry run with notices held (`Context.force_dry` / `held`). Slow routes are never previewed: a model call already sends the words out. |
 | Timers and alarms are refused | No substitute is acceptable to the owner (no Pushcut timers, no phone Shortcuts). |
 
 ## Running and testing
@@ -52,7 +53,7 @@ a general agent. Start with [README.md](README.md) (what it does, setup, status)
 ## Safety rules for assistants
 
 - **Never send real messages or control real devices** while reviewing. The live service on the Mac
-  is in live mode. Use tests, fakes, `route`, or a dry-run config. Don't `sim` against the running
+  is in live mode. Use tests, fakes, `route`, or a test-mode config. Don't `sim` against the running
   service without the owner's say-so.
 - Never print or commit secrets (`.env`), the real `config.toml`, phone numbers or addresses.
 - Don't rebuild `Ring Router.app` or HomeMCPBridge, or change launchd jobs, without asking. Rebuilds

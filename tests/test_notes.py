@@ -12,7 +12,7 @@ LONG = "Make a note: " + " ".join(f"point {i} about the boat trailer & its <bear
 
 @pytest.fixture
 def live(cfg, fake_fm):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     mcp_calls, written = [], []
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,
                   mcp_call=lambda name, args: mcp_calls.append((name, args)) or "ok",

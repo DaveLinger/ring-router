@@ -22,7 +22,7 @@ SENIOR = """- **Terri Lastname Sr**
 
 
 def run(cfg, fake_fm, contacts_out, recipient="terri"):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     calls = []
 
     def mcp_call(name, args):

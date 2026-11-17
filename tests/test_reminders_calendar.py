@@ -19,7 +19,7 @@ NOW = datetime(2026, 11, 12, 10, 14)
 
 @pytest.fixture
 def live(cfg, fake_fm):
-    cfg.raw["server"]["dry_run"] = False
+    cfg.dry_run = False
     cfg.raw["calendars"]["default"] = "Home"
     calls = []
     ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm,

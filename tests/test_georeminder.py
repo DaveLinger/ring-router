@@ -23,8 +23,7 @@ def test_parse_geo(body, expect):
 
 @pytest.fixture
 def ctx(cfg, fake_fm, tmp_path):
-    cfg.raw["server"]["dry_run"] = False
-    cfg.raw["server"]["dry_run_routes"] = []
+    cfg.dry_run = False
     calls = tmp_path / "calls.json"
     helper = tmp_path / "georeminder"
     helper.write_text(f"""#!/usr/bin/env python3
@@ -70,6 +69,6 @@ def test_missing_my_card_address(ctx):
 
 
 def test_dry_run_does_not_call_helper(ctx):
-    ctx.cfg.raw["server"]["dry_run"] = True
+    ctx.cfg.dry_run = True
     res = h_reminder(route("Remind me when I get home to feed the cat", ctx.cfg), ctx)
     assert res.state == "dry_run" and not ctx.calls_file.exists()

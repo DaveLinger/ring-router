@@ -310,7 +310,12 @@ cp config.example.toml config.toml   # recipients, models, lists, calendars, sce
 .venv/bin/ring-router route "Tell Terri I'm on my way"    # try it: dry run, nothing is sent
 ```
 
-Everything starts in **dry run**. Set `[server] dry_run = false` when the receipts look right.
+Everything starts in **test mode** (`[server] test_mode = true`). Every command is worked out as
+usual: route, rewritten text, recipient, items, times. Then it waits. A Pushcut notification says what
+it would do, with **Proceed** and **Cancel** buttons, and nothing is sent, changed or asked of a model
+until you tap Proceed. Proceed runs the command for real and goes on to the next step (a "Which one?" or
+Send tap still asks). Cancel phrases, refusals and noise aren't held. Set `test_mode = false` to go
+live when the previews look right, and restart the service after changing it.
 
 ### Run it as a service
 
@@ -373,7 +378,7 @@ would otherwise make every event appear twice.
 
 | File | What's in it | In git? |
 | --- | --- | --- |
-| `config.toml` | Module switches, recipients, models, lists, calendars, places, home, Claude Code hosts, scenes, cancel phrases, dry-run flags | ❌ copy from `config.example.toml` |
+| `config.toml` | Module switches, recipients, models, lists, calendars, places, home, Claude Code hosts, scenes, cancel phrases, test mode | ❌ copy from `config.example.toml` |
 | `.env` | Path token, signing secret, activity token, API keys (mode 600) | ❌ see `.env.example` |
 | `prompts.toml` | **Every instruction given to a model**, marked LIVE or DRAFT | ✅ |
 | `profile.md` | Facts about you added to every cloud-model prompt (location for "near me") | ❌ see `profile.example.md` |
