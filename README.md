@@ -190,7 +190,7 @@ In practice:
 | *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 Web search; follow-ups keep the thread |
 | *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 The agent spots the buried command and hands it back, word for word |
 | *"Ask Claude Code on the RackNerd VPS why the websites are down"* · *"Ask Claude on the home server why Plex is down"* | 🛠️ Claude Code on that host looks into it (read-only) and answers; naming a host is what makes "Claude" mean Claude Code |
-| *→ "Go ahead"* (or the **Proceed** button) | 🛠️ If it proposed a fix, the same session makes the change and reports back. Nothing waiting → refused |
+| *→ "Go ahead"* (or the **Proceed** button, or **Make this change** on the full-answer page) | 🛠️ If it proposed a fix, the same session makes the change and reports back. Nothing waiting → refused |
 | *→ "Ask Claude on the home server what changed last night"* | 🛠️ Follow-ups within 15 minutes continue the same Claude Code session |
 | *"Set a timer for 10 minutes"* | 🚫 Refused: timers and alarms aren't supported |
 

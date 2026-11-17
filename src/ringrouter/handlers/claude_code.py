@@ -50,6 +50,7 @@ CHANGE_TOOLS = ["Bash", "Read", "Edit", "Write", "Grep", "Glob", "WebSearch", "W
 PROPOSAL = re.compile(r"^\s*\**PROPOSED FIX:?\**:?\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 SESSION_KEY = "claude_session:{host}"
 PENDING_KEY = "claude_pending"
+ANSWER_PROPOSAL_KEY = "answer_proposal:{aid}"   # answer page -> its proposal, for the Make this change button
 
 
 def _settings(ctx: Context, host: str) -> tuple[dict, dict]:
@@ -148,6 +149,7 @@ def _answer(ctx: Context, host: str, question: str, out: dict, *, title: str, pr
         pid = ctx.store.add_pending(ctx.delivery_id, "claude_code",
                                     {"host": host, "session": sid, "proposal": proposal}, ttl)
         ctx.store.set_kv(PENDING_KEY, pid)
+        ctx.store.set_kv(ANSWER_PROPOSAL_KEY.format(aid=aid), json.dumps({"pid": pid, "proposal": proposal}))
         buttons.insert(0, Button("Proceed", f"{ctx.public_url}/confirm/{pid}/yes", background=True))
     limit = int(ctx.cfg.section("notify").get("max_chars", 300))
     body = _summary(text, limit) + (f"\nProposed: {proposal}" if proposal else "")

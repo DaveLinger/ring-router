@@ -161,3 +161,62 @@ def test_unlock_confirm_when_configured(server, cfg, monkeypatch):
     assert "needs_confirm" in text and notifier.sent[-1].buttons
     (code, text), _ = send(base, "Lock the front door")
     assert "needs_confirm" not in text
+
+
+# ------------------------------------------------- answer page: Make this change --
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _answer_with_proposal(app, ttl=900):
+    import json
+    from ringrouter.handlers.claude_code import ANSWER_PROPOSAL_KEY
+    from ringrouter.llm import Reply
+    aid = app.llm_store.save_answer("claude_code", "Claude Code on RackNerd VPS", "can we ignore the 500s",
+                                    Reply("Yes. [[PROPOSE: block CONNECT on 8080]]"))
+    pid = app.store.add_pending("d1", "claude_code", {"host": "racknerd", "session": "s", "proposal": "x"}, ttl)
+    app.store.set_kv(ANSWER_PROPOSAL_KEY.format(aid=aid), json.dumps({"pid": pid, "proposal": "block CONNECT on 8080"}))
+    return aid, pid
+
+
+def _get(url):
+    with urllib.request.urlopen(url, timeout=10) as r:
+        return r.status, r.headers, r.read().decode()
+
+
+def test_answer_page_offers_make_this_change_while_waiting(server):
+    base, app, _ = server
+    aid, pid = _answer_with_proposal(app)
+    code, headers, page = _get(f"{base}/answers/{aid}")
+    assert "Make this change" in page and f'action="/confirm/{pid}/yes?from={aid}"' in page
+    assert "block CONNECT on 8080" in page
+    assert "form-action 'self'" in headers["Content-Security-Policy"]
+
+
+def test_answer_page_cancel_goes_back_with_status_and_hides_the_button(server):
+    base, app, _ = server
+    aid, pid = _answer_with_proposal(app)
+    opener = urllib.request.build_opener(_NoRedirect)
+    req = urllib.request.Request(f"{base}/confirm/{pid}/no?from={aid}", data=b"", method="POST")
+    try:
+        opener.open(req, timeout=10)
+        assert False, "expected a redirect"
+    except urllib.error.HTTPError as e:
+        assert e.code == 303 and e.headers["Location"] == f"/answers/{aid}?r=cancelled"
+    _, _, page = _get(f"{base}/answers/{aid}?r=cancelled")
+    assert "Cancelled. Nothing was changed." in page and "Make this change" not in page
+
+
+def test_expired_proposal_has_no_button(server):
+    base, app, _ = server
+    aid, _ = _answer_with_proposal(app, ttl=-1)
+    _, _, page = _get(f"{base}/answers/{aid}")
+    assert "Make this change" not in page
+
+
+def test_plain_confirm_still_answers_text(server):
+    base, app, _ = server
+    _, pid = _answer_with_proposal(app)
+    assert post(f"{base}/confirm/{pid}/no", {}, b"") == (200, "cancelled\n")

@@ -165,6 +165,12 @@ class Store:
             self.conn.execute("UPDATE pending SET state='done' WHERE id=?", (pid,))
         return row[0], json.loads(row[1])
 
+    def pending_waiting(self, pid: str) -> bool:
+        """Is this confirmation still waiting and unexpired? (Doesn't claim it.)"""
+        with self.lock:
+            row = self.conn.execute("SELECT state, expires FROM pending WHERE id=?", (pid,)).fetchone()
+        return bool(row) and row[0] == "waiting" and row[1] >= time.time()
+
     def cancel_pending(self, pid: str) -> bool:
         with self.lock:
             cur = self.conn.execute("UPDATE pending SET state='cancelled' WHERE id=? AND state='waiting'", (pid,))

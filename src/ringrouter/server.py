@@ -209,7 +209,33 @@ class App:
         ctx.trace("result", state=res.state, summary=res.summary, confirmed=True, background=True)
         log.info("delivery %s: (confirmed, background) %s: %s", ctx.delivery_id[:8], res.state, res.summary)
 
-    def answer_page(self, aid: str) -> str | None:
+    ANSWER_STATUS = {"ok": "Going ahead. The result will arrive as a notification.",
+                     "cancelled": "Cancelled. Nothing was changed.",
+                     "expired": "That proposal expired or was already handled. Nothing was changed.",
+                     "failed": "Couldn't start it. Check the activity page."}
+
+    def answer_action(self, aid: str) -> str:
+        """The "Make this change" block for an answer whose Claude Code proposal is still waiting."""
+        import html as _h  # noqa: PLC0415
+        import json as _j  # noqa: PLC0415
+        from .handlers.claude_code import ANSWER_PROPOSAL_KEY  # noqa: PLC0415
+        raw = self.store.get_kv(ANSWER_PROPOSAL_KEY.format(aid=aid))
+        if not raw:
+            return ""
+        d = _j.loads(raw)
+        if not self.store.pending_waiting(d["pid"]):
+            return ""
+        q = urllib.parse.quote(aid, safe="")
+        btn = ("font:inherit;font-weight:600;padding:.7em 1.2em;border-radius:.6em;border:0;"
+               "margin:.3em .4em .3em 0;cursor:pointer")
+        return (f'<div style="border:1px solid #8884;border-radius:.8em;padding:1em;margin:1.2em 0">'
+                f'<p style="margin-top:0"><strong>Proposed change:</strong> {_h.escape(d["proposal"])}</p>'
+                f'<form method="post" action="/confirm/{d["pid"]}/yes?from={q}" style="display:inline">'
+                f'<button style="{btn}background:#e5533d;color:#fff">Make this change</button></form>'
+                f'<form method="post" action="/confirm/{d["pid"]}/no?from={q}" style="display:inline">'
+                f'<button style="{btn}background:#8883;color:inherit">Cancel</button></form></div>')
+
+    def answer_page(self, aid: str, status: str = "") -> str | None:
         a = self.llm_store.get_answer(aid)
         if not a:
             return None
@@ -222,8 +248,11 @@ class App:
             src = "<h3>Sources</h3><ol>" + "".join(
                 f'<li><a href="{_h.escape(c["url"])}">{_h.escape(c["title"])}</a></li>' for c in a["citations"]
                 if str(c.get("url", "")).lower().startswith(("http://", "https://"))) + "</ol>"
-        body = (f'<p class="meta">{_h.escape(a["model"])} \u00b7 {when}{cost}</p>'
-                f'<p class="q">\u201c{_h.escape(a["question"])}\u201d</p>{md.to_html(a["answer"])}{src}')
+        note = (f'<p style="border-left:3px solid #e5533d;padding-left:.8em"><strong>'
+                f'{_h.escape(self.ANSWER_STATUS[status])}</strong></p>') if status in self.ANSWER_STATUS else ""
+        body = (f'<p class="meta">{_h.escape(a["model"])} \u00b7 {when}{cost}</p>{note}'
+                f'<p class="q">\u201c{_h.escape(a["question"])}\u201d</p>{md.to_html(a["answer"])}{src}'
+                f'{self.answer_action(aid)}')
         return md.page(a["question"][:80], body)
 
     def confirm(self, pid: str, answer: str) -> tuple[int, str]:
@@ -317,13 +346,14 @@ def make_handler(app: App):
                     return self._html(page)
                 return self.reply(404, "not found")
             if p.startswith("/answers/"):
-                page = app.answer_page(p.split("/", 2)[2])
+                q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+                page = app.answer_page(p.split("/", 2)[2], (q.get("r") or [""])[0])
                 if page is None:
                     return self.reply(404, "not found")
-                return self._html(page)
+                return self._html(page, forms=True)
             return self.reply(404, "not found")
 
-        def _html(self, page: str):
+        def _html(self, page: str, forms: bool = False):
             data = page.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -333,7 +363,8 @@ def make_handler(app: App):
             # The pages are text and inline CSS only. Nothing else may load or run, even if model
             # output slipped markup through, and the secret in the URL isn't sent on to linked sites.
             self.send_header("Content-Security-Policy",
-                             "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+                             "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
+                             + ("form-action 'self'" if forms else "form-action 'none'"))
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
@@ -429,6 +460,16 @@ def make_handler(app: App):
             if len(parts) != 3 or not (parts[2] in ("yes", "no") or parts[2] in "123456789" and len(parts[2]) == 1):
                 return self.reply(404, "not found")
             code, text = app.confirm(parts[1], parts[2])
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            back = (q.get("from") or [""])[0]
+            if back and app.llm_store.get_answer(back):     # the answer page's button: go back to it
+                status = ("cancelled" if parts[2] == "no" else "expired" if code == 410
+                          else "ok" if code < 400 else "failed")
+                self.send_response(303)
+                self.send_header("Location", f"/answers/{urllib.parse.quote(back, safe='')}?r={status}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return None
             return self.reply(code, text)
 
     return Handler
