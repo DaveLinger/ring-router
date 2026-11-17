@@ -280,3 +280,21 @@ def test_open_the_door_asks_which_instead_of_opening_the_garage(cfg, fake_fm):
     assert h_home(route("Open the door", cfg), ctx).state == "refused"
     assert calls == [] and ctx.notifier.sent[-1].title == "Which one?"
     assert h_home(route("Open the garage door", cfg), ctx).state == "done" and calls == ["/devices/70/open"]
+
+
+
+def test_secret_with_trailing_newline_is_accepted():
+    """The Pebble app signs with a newline pasted into its secret field (seen on real traffic)."""
+    import pytest
+    from ringrouter import protocol
+    ts, did, trig, body = "1794942159", "e8b0b417-39fe-44e4-bc8f-4c1013a1d61f", "test-event", b"x"
+
+    def headers(key):
+        return {"X-Index-Webhook-Version": "1", "X-Index-Timestamp": ts, "X-Index-Delivery": did,
+                "X-Index-Trigger": trig, "X-Index-Test": "true",
+                "X-Index-Signature": protocol.sign(key, ts, did, trig, True, body)}
+
+    for key in ("s3cret", "s3cret\n"):
+        assert protocol.verify(headers(key), body, "s3cret", now=int(ts)).delivery_id == did
+    with pytest.raises(protocol.RejectError):
+        protocol.verify(headers("other"), body, "s3cret", now=int(ts))

@@ -456,11 +456,11 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 
 | Piece | State |
 | --- | --- |
-| Webhook checks: secret path, HMAC v1, ±5 min, dedupe, old-recording gate | ✅ Done (the real ring's format still needs checking against real traffic) |
+| Webhook checks: secret path, HMAC v1, ±5 min, dedupe, old-recording gate | ✅ Live, checked against real ring traffic (2026-11-17) |
 | Router: cancels, scenes, fixed commands, recipient tiers, refusals | ✅ Done; 117 phrases in the answer key |
 | On-device model: "ask" rewrites, note titles, item splits, reminder and event titles | ✅ Done (real model) |
 | Dates and times in code (`when.py`), the model as flagged fallback | ✅ Done; 21 of 21 live cases right |
-| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live end to end through the tunnel; real sends still limited to the owner (`live_recipients`) |
+| iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live end to end from the real ring |
 | Pushcut notifications and buttons | ✅ Send/Cancel and Full answer verified through the tunnel |
 | Ask a model, research notes: OpenRouter, web search, follow-ups, answer page | ✅ Live-tested with all four models; saving a research note waits on the Notes permission |
 | General agent: macOS tools, web search, follow-ups, `run_command`, write-intent gate | ✅ Live: read the real calendar, then moved an event as a follow-up |
@@ -469,7 +469,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Tailscale Funnel limited to `/hook`, `/confirm`, `/answers`, `/health`; activity page tailnet-only | ✅ Live |
 | Location reminders ("when I get home / when I leave") | ✅ Live: geofence from your Contacts card, verified on the iPhone |
 | Named places for location reminders (`[places]`), "here" refusal | ✅ Live: a real geofence reminder at the gym (address from config, geocoded by Apple) created through the service and removed; unknown places and "when I leave here" refused live |
-| "Tell her…" follow-ups, leading "also/and" | ✅ Checked end to end through the live service (Terri sends are dry runs while `live_recipients` is only you) |
+| "Tell her…" follow-ups, leading "also/and" | ✅ Checked end to end through the live service |
 | Activity page, watchdog, Ring Router.app, Tailscale Funnel, launchd service | ✅ Live |
 | Daily self-test | ✅ Installed; first run passed all eight checks |
 | Agent home tools | ✅ Live on the Laundry Room Door: "Is it locked?" (status), "get it locked" (runs), "unlock it" (held for a Send tap, then ran) |

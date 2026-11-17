@@ -339,22 +339,49 @@ def make_handler(app: App):
             self.end_headers()
             self.wfile.write(data)
 
+        def _read_chunked(self) -> bytes | None:
+            """Read a Transfer-Encoding: chunked body; None if malformed or over MAX_BODY."""
+            out = bytearray()
+            try:
+                while True:
+                    size = int(self.rfile.readline(64).split(b";", 1)[0].strip(), 16)
+                    if size == 0:
+                        while self.rfile.readline(1024).strip():   # trailers
+                            pass
+                        return bytes(out)
+                    if len(out) + size > MAX_BODY:
+                        return None
+                    out += self.rfile.read(size)
+                    self.rfile.readline(8)                         # CRLF after each chunk
+            except ValueError:
+                return None
+
         def do_POST(self):
             p = self.path.split("?", 1)[0]
             if p.startswith("/confirm/"):
                 return self._confirm(p)
             if not path_token or not same(p.rstrip("/"), "/hook/" + path_token):
+                log.warning("rejected: POST to unknown path")
                 return self.reply(404, "not found")
             if not secret:
                 log.error("no signing_secret configured; refusing")
                 return self.reply(503, "not configured")
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                return self.reply(400, "bad length")
-            if length <= 0 or length > MAX_BODY:
-                return self.reply(400, "bad length")
-            body = self.rfile.read(length)
+            if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+                body = self._read_chunked()
+                length = len(body) if body is not None else 0
+                if body is None:
+                    log.warning("rejected: bad chunked body")
+                    return self.reply(400, "bad length")
+            else:
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    length = -1
+                if length <= 0 or length > MAX_BODY:
+                    log.warning("rejected: bad length (Content-Length=%r, Transfer-Encoding=%r)",
+                                self.headers.get("Content-Length"), self.headers.get("Transfer-Encoding"))
+                    return self.reply(400, "bad length")
+                body = self.rfile.read(length)
             try:
                 v = protocol.verify(self.headers, body, secret, window)
             except protocol.RejectError as e:
@@ -365,6 +392,7 @@ def make_handler(app: App):
                 log.info("delivery %s: test event OK (nothing run)", did[:8])
                 return self.reply(200, "test ok")
             if v.trigger not in protocol.RECORDING_TRIGGERS:
+                log.warning("delivery %s: ignored trigger %r", did[:8], v.trigger)
                 return self.reply(200, "ignored trigger")
             with hook_lock:
                 state = app.store.get_state(did)
@@ -378,6 +406,7 @@ def make_handler(app: App):
             try:
                 fields = protocol.parse_multipart(self.headers.get("Content-Type", ""), body)
             except Exception:
+                log.warning("delivery %s: discarded, malformed multipart", did[:8])
                 app.store.set_state(did, "discarded", summary="malformed multipart")
                 return self.reply(400, "malformed multipart")
             app.store.add_trace(did, "received", {
@@ -388,6 +417,8 @@ def make_handler(app: App):
                 "via": self.headers.get("X-Forwarded-For") or self.client_address[0]})
             transcript = (fields.get("transcription") or "").strip()
             if not transcript:
+                log.warning("delivery %s: discarded, no transcription (fields: %s); set this "
+                            "gesture's webhook to send Transcription", did[:8], ", ".join(sorted(fields)))
                 app.store.set_state(did, "discarded", summary="no transcription part")
                 return self.reply(200, "discarded: no transcription (set payload mode to include it)")
             code, text = app.process(did, transcript, recorded_time(fields.get("recordedAt")))

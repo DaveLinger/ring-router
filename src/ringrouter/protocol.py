@@ -83,8 +83,11 @@ def verify(headers, body: bytes, secret: str, window_s: int = 300, now: float | 
         raise RejectError(400, f"unsupported webhook version {version!r}")
     if not ts.isdigit() or not DELIVERY_RE.fullmatch(delivery_id) or not trigger:
         raise RejectError(400, "malformed headers")
-    if not SIG_RE.fullmatch(sig) or not hmac.compare_digest(
-            sig, sign(secret, ts, delivery_id, trigger, is_test, body)):
+    # The Pebble app keeps a trailing newline pasted into its secret field (invisible there) and
+    # signs with it, so the same secret with "\n" appended is accepted too.
+    if not SIG_RE.fullmatch(sig) or not any(
+            hmac.compare_digest(sig, sign(k, ts, delivery_id, trigger, is_test, body))
+            for k in (secret, secret + "\n")):
         raise RejectError(401, "bad signature")
     now = time.time() if now is None else now
     if abs(now - int(ts)) > window_s:
