@@ -213,6 +213,24 @@ extracted = "why did the backup fail last night?"
 host = "mac_mini"
 
 [[case]]
+say = "Ask Claude Code on Rachnard how much disk space is free"   # misheard host: sounds + spelled alike
+route = "claude_code"
+host = "racknerd"
+extracted = "how much disk space is free"
+
+[[case]]
+say = "Ask Claude on rack nard whether nginx is running"
+route = "claude_code"
+host = "racknerd"
+extracted = "whether nginx is running"
+
+[[case]]
+say = "Ask Claude Code on Contabow is the disk full"
+route = "claude_code"
+host = "contabo"
+extracted = "is the disk full"
+
+[[case]]
 say = "Ask Claude Code on the Synology why it's slow"
 route = "refuse"
 rule = "unknown_host"

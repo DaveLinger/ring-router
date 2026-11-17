@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import cancel, places, recipients
-from .text import SEP, capitalize_first, clean, match_prefix, simple, strip_body
+from .text import SEP, capitalize_first, clean, match_prefix, similarity, simple, soundex, strip_body
 
 QUESTION_WORDS = ("what", "what's", "whats", "when", "when's", "where", "where's", "who", "who's",
                   "which", "did", "does", "do", "is", "are", "was", "were", "has", "have", "how",
@@ -108,6 +108,25 @@ def _match_spoken(t: str, pos: int, section: dict) -> tuple[str, int] | None:
     return None
 
 
+def _near_host(t: str, pos: int, hosts: dict) -> tuple[str, int] | None:
+    """A misheard host name ("Rachnard" for RackNerd): the next one or two words, squashed together,
+    that sound like (same Soundex) and are spelled like (similarity >= 0.7) the spoken names of
+    exactly one host. Safe to guess: Claude Code's first run on a host only looks."""
+    words = list(re.finditer(r"[\w']+", t[pos:]))[:2]
+    for n in (1, 2):                    # one word first, so "Contabow is…" keeps its "is"
+        if len(words) < n:
+            continue
+        heard = "".join(w.group(0).lower() for w in words[:n])
+        if len(heard) < 4:
+            continue
+        keys = {key for spoken, key in _spoken_index(hosts)
+                if (name := re.sub(r"^the ", "", spoken).replace(" ", "")) and len(name) >= 4
+                and soundex(heard) == soundex(name) and similarity(heard, name) >= 0.7}
+        if len(keys) == 1:
+            return keys.pop(), pos + words[n - 1].end()
+    return None
+
+
 ON_HOST = re.compile(r"(?:on|in|at)" + SEP + r"+(?:the" + SEP + r"+)?", re.IGNORECASE)
 # "Go ahead" / "do it" (the whole command): apply the fix Claude Code just proposed. The handler
 # refuses unless exactly one proposal is waiting, so on its own it can't do anything.
@@ -131,7 +150,7 @@ def _claude_code(t: str, raw: dict) -> Route | None:
         names = dict.fromkeys(["claude", *raw.get("models", {}).get("claude", {}).get("spoken", [])])
         v = match_prefix(t, [f"{verb} {n}" for verb in ("ask", "tell", "hey") for n in names])
         on = v and ON_HOST.match(t, v[1])
-        hm = on and _match_spoken(t, on.end(), hosts)
+        hm = on and (_match_spoken(t, on.end(), hosts) or _near_host(t, on.end(), hosts))
         if not hm:
             return None
         host, pos = hm
@@ -142,7 +161,8 @@ def _claude_code(t: str, raw: dict) -> Route | None:
     host = next((k for k, h in hosts.items() if h.get("default")), None)
     on = ON_HOST.match(t, pos)
     if on:
-        hm = _match_spoken(t, on.start(), hosts) or _match_spoken(t, on.end(), hosts)
+        hm = (_match_spoken(t, on.start(), hosts) or _match_spoken(t, on.end(), hosts)
+              or _near_host(t, on.end(), hosts))
         if not hm:
             heard = t[on.end():].split(" ", 1)[0]
             return Route("refuse", t, params={"rule": "unknown_host",
