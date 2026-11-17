@@ -204,9 +204,11 @@ In practice:
 - **Your people, then Contacts.** The people and chats in your config come first. With
   `[messages] contacts = true`, any other name is looked up in Contacts and ranked by your recent
   one-to-one Messages (`people.py`; needs Full Disk Access for Ring Router.app; only who/when/which
-  service is read, never message text). It sends without a tap only when exactly one card with that
-  first name (or nickname: Nate = Nathan) is someone *you* wrote to in the last 7 days and nobody else
-  that recent sounds alike (Nate/Kate), or when you say a first + last name that matches one card.
+  service is read, never message text). It sends without a tap only when exactly one person *you*
+  wrote to in the last 7 days has that first name (or nickname: Nate = Nathan) or a sound-alike
+  (Nate/Kate), or when you say a first + last name that matches one card. Configured people follow
+  the same rule: "Chris" asks if you also wrote to another Chris (or a sound-alike) this week, and a
+  near miss ("Dan" for Dane) sends when Dane is the only one of them you wrote to lately.
   Otherwise: one **Send** button per candidate (up to 3), or refused if no card matches. It goes to
   the number or address of the conversation you last wrote in. "Ask Google what…" with no Google in
   Contacts goes to the agent. `live_recipients` keeps Contacts matches in dry run unless it lists `"contacts"`.

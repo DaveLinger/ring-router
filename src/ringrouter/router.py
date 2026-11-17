@@ -433,7 +433,7 @@ def _message_route(t: str, rm, kind: str, rest: str, bare: bool = False, raw: di
         return Route("imessage_contact", t, body=body, verb=kind, params=params,
                      reason="message (name not configured: Contacts and recent Messages decide)")
     tier_route = {"strong": "imessage", "weak": "imessage", "unknown": "refuse", "pronoun": "imessage_followup"}[rm.tier]
-    params = {"recipient": rm.key, "tier": rm.tier, "heard": rm.heard, "rewrite": rewrite}
+    params = {"recipient": rm.key, "tier": rm.tier, "heard": rm.heard, "rewrite": rewrite, "by_name": True}
     if rm.tier == "pronoun":
         params = {"pronoun": rm.heard, "rewrite": rewrite}
     if rm.tier == "unknown":

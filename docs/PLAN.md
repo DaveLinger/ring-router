@@ -160,10 +160,10 @@ revisit if real use shows a need.
 
 | Tier | Example | Action |
 | --- | --- | --- |
-| 1. Allowlisted, strong match | "tell terri…", "tell terry…" | Send, then a receipt notification |
-| 2. Allowlisted, weak match | "tell sherry…" | Pushcut confirmation: **Send / Cancel** |
-| 3a. Contacts, clear | "tell nate…" (the one Nate/Nathan you wrote to in 7 days, no recent sound-alike) · "tell frank schwartz…" (exact full name, one card) | Send ([messages] contacts) |
-| 3b. Contacts, unclear | several matches · only a sound-alike · only someone not messaged in 7 days | **Send** button per person (max 3) |
+| 1. Allowlisted, strong match | "tell terri…", "tell terry…" | Send, then a receipt notification. With `[messages] contacts`: a **Send** button each if someone else you wrote to in 7 days has that name or a sound-alike |
+| 2. Allowlisted, weak match | "tell sherry…" | Pushcut confirmation: **Send / Cancel**. With `[messages] contacts`: sends if exactly one of Terri / Sherry / other sound-alikes was written to in 7 days (to that one); buttons if several |
+| 3a. Contacts, clear | "tell nate…" (the only person you wrote to in 7 days named Nate/Nathan or a sound-alike) · "tell frank schwartz…" (exact full name, one card) | Send ([messages] contacts) |
+| 3b. Contacts, unclear | several recent matches or sound-alikes · only someone not messaged in 7 days | **Send** button per person (max 3) |
 | 3c. Nobody | "tell zebulon…" | Never sent: "Didn't recognize…". "Ask X what…" goes to the agent instead |
 | Pronoun follow-up | "tell her…", "let him know…", "ask them…" | The last recipient within `[messages] followup_window_s` (600 s): sends if the pronoun fits their `pronoun` (a group chat is "them"), else **Send / Cancel**; nobody recent → refused |
 

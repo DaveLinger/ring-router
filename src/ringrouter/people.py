@@ -205,6 +205,33 @@ def _sounds_like(heard: str, name: str) -> bool:
     return near or (bool(sound_key(heard)) and sound_key(heard) == sound_key(name))
 
 
+def recent_named(heard: str, people: list[Person], *, now: float | None = None,
+                 recent_days: int = 7) -> list[Person]:
+    """People you wrote to in the last `recent_days` whose first name or nickname is `heard`, or sounds
+    like it, newest first. Only people with somewhere to send are included."""
+    now = now or time.time()
+    first = simple(heard)
+    if not first:
+        return []
+    forms, cut = name_forms(first), now - recent_days * DAY
+    return sorted((p for p in people if p.last_from_me >= cut and p.handle()
+                   and (p.first_names() & forms or any(_sounds_like(first, n) for n in p.first_names()))),
+                  key=lambda p: -p.last_from_me)
+
+
+def card_for(rc: dict, people: list[Person]) -> Person | None:
+    """The Contacts card behind a configured recipient: by pinned handle, else by `contact` name."""
+    h = rc.get("handle")
+    if h:
+        n = _norm(h)
+        for p in people:
+            if any(_norm(x) == n for x in [*p.chats, *p.phones, *p.emails]):
+                return p
+    name = simple(rc.get("contact", "")) if rc.get("contact") else ""
+    hits = [p for p in people if name and simple(p.display) == name]
+    return hits[0] if len(hits) == 1 else None
+
+
 def match(words: list[str], people: list[Person], *, now: float | None = None, recent_days: int = 7,
           max_choices: int = 3) -> Decision:
     """Decide who words[0] (maybe with words[1] as a last name) means."""
@@ -239,9 +266,11 @@ def match(words: list[str], people: list[Person], *, now: float | None = None, r
     def consumed(p: Person) -> int:       # "tell Nate Bowman ..." when only "Nate" decided it
         return 2 if len(words) > 1 and p.last and simple(p.last) == words[1] else 1
 
-    if len(recent_exact) == 1 and not alike:
-        p = recent_exact[0]
-        return Decision("send", [Choice(p, why(p))], consumed(p), first)
+    pool = recent_exact + alike           # everyone you wrote to lately who could be the one meant
+    if len(pool) == 1 and pool[0].handle():
+        p = pool[0]
+        reason = why(p) if p in recent_exact else f"sounds like “{first}”, {why(p)}"
+        return Decision("send", [Choice(p, reason)], consumed(p), first)
 
     older = sorted((p for p in exact if not recent(p)), key=lambda p: -p.last_from_me)
     choices = ([Choice(p, why(p)) for p in recent_exact]

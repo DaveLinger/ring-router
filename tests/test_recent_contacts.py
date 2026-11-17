@@ -77,9 +77,12 @@ def test_old_sound_alike_does_not_block():
     assert match(["nate"], [NATE, person("Kate", "Moss", days_ago=90)], now=NOW).tier == "send"
 
 
-def test_only_a_sound_alike_asks():
-    d = match(["nate"], [person("Kate", "Moss", days_ago=2)], now=NOW)
-    assert (d.tier, names(d)) == ("ask", ["Kate Moss"])
+def test_only_recent_sound_alike_sends():
+    """Owner's rule (2026-11-17): the one person you wrote to lately with that name or a
+    sound-alike gets it, even when older cards have the exact name."""
+    d = match(["nate"], [person("Kate", "Moss", days_ago=2), person("Nate", "Old", days_ago=200)], now=NOW)
+    assert (d.tier, names(d)) == ("send", ["Kate Moss"])
+    assert "sounds like" in d.choices[0].why
 
 
 def test_full_name_sends_however_long_ago():
@@ -311,3 +314,60 @@ def test_names_that_dont(a, b):
 def test_a_recent_erin_stops_aaron_sending_without_a_tap():
     d = match(["aaron"], [person("Aaron", "Price", days_ago=1), person("Erin", "Wolfe", days_ago=2)], now=NOW)
     assert (d.tier, names(d)) == ("ask", ["Aaron Price", "Erin Wolfe"])
+
+
+# ------------------------------------------- configured recipients + recency --
+# Owner's rule (2026-11-17): a configured name follows the same 7-day rule as Contacts.
+
+TERRI = person("Terri", "Lastname", days_ago=1, handle="+15550100010")
+
+
+def terri_ctx(cfg, fake_fm, everyone):
+    cfg.raw["recipients"]["terri"]["handle"] = "+15550100010"
+    return make_ctx(cfg, fake_fm, everyone)
+
+
+def test_configured_name_sends_when_nobody_else_recent_has_it(cfg, fake_fm):
+    ctx, calls, _ = terri_ctx(cfg, fake_fm, [TERRI, person("Terri", "Old", days_ago=90)])
+    assert say("Tell Terri I'm home", ctx).state == "done"
+    assert sent(calls) == [{"action": "create", "to": "+15550100010", "text": "I'm home"}]
+
+
+def test_configured_name_asks_when_another_recent_person_has_it(cfg, fake_fm):
+    other = person("Terri", "Other", days_ago=2, handle="+15550100011")
+    ctx, calls, notes = terri_ctx(cfg, fake_fm, [TERRI, other])
+    assert say("Tell Terri I'm home", ctx).state == "needs_confirm" and not sent(calls)
+    assert [b.label for b in notes[-1].buttons] == ["Terri", "Terri Other", "Cancel"]
+    pid = notes[-1].buttons[1].url.split("/")[-2]
+    kind, payload = ctx.store.take_pending(pid)
+    assert run_confirmed(kind, payload, ctx, choice=2).state == "done"
+    assert sent(calls) == [{"action": "create", "to": "+15550100011", "text": "I'm home"}]
+
+
+def test_near_miss_sends_to_configured_when_only_they_are_recent(cfg, fake_fm):
+    ctx, calls, _ = terri_ctx(cfg, fake_fm, [TERRI, person("Sherry", "Old", days_ago=90)])
+    assert say("Tell Sherry I'm on my way", ctx).state == "done"
+    assert sent(calls) == [{"action": "create", "to": "+15550100010", "text": "I'm on my way"}]
+
+
+def test_near_miss_sends_to_the_contact_when_only_they_are_recent(cfg, fake_fm):
+    sherry = person("Sherry", "New", days_ago=1, handle="+15550100012")
+    old_terri = person("Terri", "Lastname", days_ago=90, handle="+15550100010")
+    ctx, calls, _ = terri_ctx(cfg, fake_fm, [old_terri, sherry])
+    assert say("Tell Sherry I'm on my way", ctx).state == "done"
+    assert sent(calls) == [{"action": "create", "to": "+15550100012", "text": "I'm on my way"}]
+
+
+def test_near_miss_asks_when_both_are_recent(cfg, fake_fm):
+    sherry = person("Sherry", "New", days_ago=1, handle="+15550100012")
+    ctx, calls, notes = terri_ctx(cfg, fake_fm, [TERRI, sherry])
+    assert say("Tell Sherry I'm on my way", ctx).state == "needs_confirm" and not sent(calls)
+    assert {"Terri", "Sherry New"} <= {b.label for b in notes[-1].buttons}
+
+
+def test_rerouted_message_still_asks_even_when_recent(cfg, fake_fm):
+    ctx, calls, _ = terri_ctx(cfg, fake_fm, [TERRI])
+    r = route("Tell Terri I'm home", cfg)
+    r.params.update(tier="weak", by_name=False,          # what the agent's reroute does
+                    heard="terri (picked out of background noise)")
+    assert run(r, ctx).state == "needs_confirm" and not sent(calls)

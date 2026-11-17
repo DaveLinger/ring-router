@@ -154,6 +154,7 @@ def h_agent(r: Route, ctx: Context, kind: str) -> Result:
             return "agent", "not a fixed command"
         if sub_r.route in ("imessage", "imessage_followup") and ctx.cfg.section("agents").get("confirm_rerouted_messages", True):
             sub_r.params["tier"] = "weak"            # noise around it: ask before texting anyone
+            sub_r.params["by_name"] = False          # ...and recent Messages can't turn that into a send
             sub_r.params["heard"] = f"{sub_r.params.get('heard', '')} (picked out of background noise)"
         if sub_r.route == "home" and sub_r.params.get("action") in ctx.cfg.section("agents").get(
                 "confirm_rerouted_home", ["unlock", "open"]):

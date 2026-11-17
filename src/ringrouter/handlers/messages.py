@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 
 from .. import people
 from ..fm import checked_rewrite
@@ -60,7 +61,7 @@ def h_imessage_followup(r: Route, ctx: Context) -> Result:
               recipient_pronoun=recipient_pronoun(rc) or "unset")
     rerouted = r.params.get("tier") == "weak"                  # the agent dug it out of noise: always ask
     params = {**r.params, "recipient": key, "tier": "strong" if fits and not rerouted else "weak",
-              "heard": r.params.get("heard") or said, "rc": contact}
+              "heard": r.params.get("heard") or said, "rc": contact, "by_name": False}
     return h_imessage(Route("imessage", r.transcript, body=r.body, verb=r.verb, params=params,
                             reason=f"{said!r} = last recipient {key}"), ctx)
 
@@ -80,7 +81,77 @@ def compose_imessage(r: Route, ctx: Context) -> tuple[str, bool]:
     return text, False
 
 
+def _contact_rc(p: people.Person) -> tuple[str, dict]:
+    h = p.handle()
+    return f"contact:{h}", {"display": p.display, "handle": h, "sounds_like": sorted(p.first_names())}
+
+
+def _by_recent(r: Route, ctx: Context) -> Result | None:
+    """A configured recipient picked by a spoken name follows the same 7-day rule as Contacts: if
+    exactly one person you wrote to lately has that name or a sound-alike, send to them; if several
+    do, ask which. Returns None to carry on as routed (tier possibly raised to strong)."""
+    pr = r.params
+    heard = people.simple(pr.get("heard") or "")
+    mc = ctx.cfg.section("messages")
+    if not pr.get("by_name") or pr.get("rc") or not heard or " " in heard or not mc.get("contacts"):
+        return None
+    rc = ctx.cfg.raw.get("recipients", {}).get(pr.get("recipient"), {})
+    if rc.get("chat_id"):
+        return None
+    try:
+        everyone = _people(ctx)
+    except Exception:
+        log.warning("Contacts lookup failed; recipient tier left as routed", exc_info=True)
+        return None
+    days = int(mc.get("recent_days", 7))
+    me = people.card_for(rc, everyone)
+    pool = people.recent_named(heard, everyone, recent_days=days)
+    me_recent = me is not None and me.last_from_me >= time.time() - days * people.DAY
+    others = [p for p in pool if p is not me]
+    ctx.trace("recent_check", recipient=pr["recipient"], heard=heard, recipient_recent=me_recent,
+              others=[p.display for p in others])
+    if not others:
+        if pr["tier"] == "weak" and me_recent:      # "Dan" when Dane is the only one lately
+            pr["tier"], pr["why"] = "strong", "the only one with that name you messaged lately"
+        return None                                 # strong stays strong; nobody recent: tap as before
+    if pr["tier"] == "weak" and not me_recent and len(others) == 1:
+        key, crc = _contact_rc(others[0])           # "Dan" when Dan Howard is the only one lately
+        return h_imessage(Route("imessage", r.transcript, body=r.body, verb=r.verb, params={
+            "recipient": key, "rc": crc, "tier": "strong", "heard": pr["heard"],
+            "rewrite": pr.get("rewrite", "none")}, reason="only recent match"), ctx)
+    entries = [({"recipient": pr["recipient"], "rc": None}, rc.get("display", pr["recipient"]),
+                "messaged lately" if me_recent else "your saved contact")]
+    for p in others:
+        key, crc = _contact_rc(p)
+        entries.append(({"recipient": key, "rc": crc}, p.display, people._ago(p.last_from_me, time.time())))
+    return _ask_which(r, ctx, entries[: int(mc.get("max_choices", 3))], pr["heard"])
+
+
+def _ask_which(r: Route, ctx: Context, entries: list[tuple[dict, str, str]], heard: str) -> Result:
+    """Several people could be meant: one Send button each. Entries are (recipient, label, why)."""
+    first = entries[0][0]
+    text, rewrote = compose_imessage(Route("imessage", r.transcript, body=r.body, verb=r.verb, params={
+        **first, "rewrite": r.params.get("rewrite", "none")}), ctx)
+    ctx.trace("message_composed", recipient=f"one of {len(entries)}", tier="choice", heard=heard,
+              spoken=r.body, text=text, rewritten=rewrote)
+    if not text:
+        return Result("discarded", "empty message")
+    pid = ctx.store.add_pending(ctx.delivery_id, "imessage", {"text": text, "choices": [e[0] for e in entries]},
+                                ctx.cfg.section("notify").get("confirm_ttl_s", 300))
+    who = "; ".join(f"{label} ({why})" for _, label, why in entries)
+    buttons = [Button(label, f"{ctx.public_url}/confirm/{pid}/{i}", background=True)
+               for i, (_, label, _w) in enumerate(entries, 1)]
+    ctx.notify("Which one?", f"“{text}” to: {who}? (heard “{heard}”)",
+               buttons + [Button("Cancel", f"{ctx.public_url}/confirm/{pid}/no", background=True)])
+    return Result("needs_confirm", f"{len(entries)} people match {heard!r}; confirmation {pid}")
+
+
 def h_imessage(r: Route, ctx: Context) -> Result:
+    if r.params.get("by_name"):
+        r = Route(r.route, r.transcript, body=r.body, verb=r.verb, params=dict(r.params), reason=r.reason)
+        res = _by_recent(r, ctx)
+        if res is not None:
+            return res
     if (r.params.get("tier") == "weak" and not r.params.get("rc") and r.params.get("recipient")
             and _is_contact_name(r.params.get("heard"), ctx)):
         # "Tell Sherry ..." is a near-miss of Terri, but Sherry is a real contact: she wins
