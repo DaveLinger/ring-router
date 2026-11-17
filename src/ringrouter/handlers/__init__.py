@@ -67,7 +67,7 @@ def h_discard(r: Route, ctx: Context) -> Result:
 
 
 def h_cancelled(r: Route, ctx: Context) -> Result:
-    ctx.notify("Cancelled", f"Nothing done. Heard: “{r.transcript}”")
+    ctx.notify("Cancelled", f"Nothing done. Heard: “{r.transcript}”", receipt=True)
     return Result("cancelled", f"cancelled ({r.params['phrase']!r})")
 
 

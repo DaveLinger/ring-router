@@ -298,3 +298,21 @@ def test_secret_with_trailing_newline_is_accepted():
         assert protocol.verify(headers(key), body, "s3cret", now=int(ts)).delivery_id == did
     with pytest.raises(protocol.RejectError):
         protocol.verify(headers("other"), body, "s3cret", now=int(ts))
+
+
+def test_receipts_off_skips_plain_successes_only(cfg, fake_fm):
+    """[notify] receipts = false: "Sent to Terri" stays in the trace; errors and taps still notify."""
+    from ringrouter.handlers import Context
+    from ringrouter.notify import Button, ConsoleNotifier
+    from ringrouter.store import Store
+    cfg.raw.setdefault("notify", {})["receipts"] = False
+    ctx = Context(cfg=cfg, notifier=ConsoleNotifier(echo=False), store=Store(":memory:"), fm=fake_fm, delivery_id="d1")
+    out = []
+    ctx.notifier.send = out.append
+    ctx.notify("Sent to Terri", "hi", receipt=True)
+    ctx.notify("Not sent", "error")
+    ctx.notify("Confirm", "tap", [Button("Send", "u")], receipt=True)
+    assert [n.title for n in out] == ["Not sent", "Confirm"]
+    cfg.raw["notify"]["receipts"] = True
+    ctx.notify("Sent to Terri", "hi", receipt=True)
+    assert out[-1].title == "Sent to Terri"

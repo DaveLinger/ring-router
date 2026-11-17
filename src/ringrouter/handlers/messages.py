@@ -211,7 +211,7 @@ def send_imessage(payload: dict, ctx: Context, rewrote: bool = False) -> Result:
         ctx.notify("Not sent", f"To {display}: {e}")
         return Result("failed", f"send failed: {e}", 422)
     _remember_recipient(ctx, payload)
-    ctx.notify(f"Sent to {display}", f"“{text}”{note}")
+    ctx.notify(f"Sent to {display}", f"“{text}”{note}", receipt=True)
     return Result("done", f"sent to {display}: {text!r}")
 
 

@@ -126,7 +126,7 @@ In practice:
 | --- | --- |
 | 🎙️ **Push-to-talk means intent** | The ring only listens while you hold the button, so what you say runs, including "unlock the front door". Confirmations are opt-in per action. The built-in check is about *who*, not *what*: a message goes without a tap only to someone it's clearly meant for (your configured people, or a Contacts card you've messaged lately). |
 | 🧮 **Code decides, models assist** | Routing, recipients, device matching and dates are deterministic code with an answer key ([`tests/phrases.toml`](tests/phrases.toml)). Apple's on-device model does the small language jobs: turning *"ask Terri when she'll be home"* into *"When will you be home?"*, titling notes, splitting shopping lists. |
-| 🧾 **Every command leaves a receipt** | A notification says exactly what was sent or changed, and the activity page shows each step: what was heard, how it routed, what each model said, what was sent to macOS or the house. |
+| 🧾 **Every command leaves a receipt** | A notification says exactly what was sent or changed, and the activity page shows each step: what was heard, how it routed, what each model said, what was sent to macOS or the house. Set `[notify] receipts = false` to get notifications only for errors, questions (Send / Which one? taps), answers, and anything to check ("check the date", "Home: check it"); plain successes then show on the activity page only. |
 
 ---
 

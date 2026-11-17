@@ -160,7 +160,7 @@ def execute_home(ctx: Context, payload: dict, what: str | None = None) -> Result
         ctx.notify("Home: check it", "; ".join(unconfirmed))
         return Result("partial", f"{what}; not confirmed: {'; '.join(unconfirmed)}", 422)
     done = what[:1].upper() + what[1:] + (" (confirmed)" if check else "")
-    ctx.notify("Home", done)
+    ctx.notify("Home", done, receipt=True)
     return Result("done", what + (" (confirmed)" if check else ""))
 
 

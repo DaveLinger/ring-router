@@ -63,13 +63,13 @@ def h_note(r: Route, ctx: Context, folder: str | None = None, route_name: str = 
             import html as _html  # noqa: PLC0415
             ctx.notes_writer(title, "".join(f"<p>{_html.escape(p)}</p>" for p in r.body.split("\n") if p.strip()),
                              folder)
-            ctx.notify("Note created", f"{title} ({folder})")
+            ctx.notify("Note created", f"{title} ({folder})", receipt=True)
             return Result("done", f"note {title!r} in {folder!r} ({len(r.body)} characters)")
         except Exception as e:
             log.warning("long note via AppleScript failed (%s); saving the first %d characters", e, NOTE_MCP_LIMIT)
             cut = f", cut at {NOTE_MCP_LIMIT:,} of {len(r.body):,} characters"
     ctx.mcp_call("notes_items", {"action": "create", "title": title, "body": r.body[:NOTE_MCP_LIMIT], "folder": folder})
-    ctx.notify("Note created", f"{title} ({folder}{cut})")
+    ctx.notify("Note created", f"{title} ({folder}{cut})", receipt=not cut)
     return Result("done", f"note {title!r} in {folder!r}{cut}")
 
 
@@ -102,7 +102,7 @@ def h_list_add(r: Route, ctx: Context) -> Result:
         except Exception as e:
             failed.append(f"{it} ({e})")
     if not failed:
-        ctx.notify(f"Added to {rl}", ", ".join(items))
+        ctx.notify(f"Added to {rl}", ", ".join(items), receipt=True)
         return Result("done", f"added {items} to {rl!r}")
     parts = ([f"Added: {', '.join(added)}."] if added else []) + [f"Not added: {'; '.join(failed)}."] \
         + ([f"Not tried: {', '.join(skipped)}."] if skipped else [])
@@ -201,7 +201,7 @@ def h_geo_reminder(r: Route, ctx: Context) -> Result:
     if not out.get("ok"):
         ctx.notify("Not done", f"Location reminder failed: {out.get('error')}")
         return Result("failed", f"georeminder: {out.get('error')}", 422)
-    ctx.notify("Reminder set", f"{g.title}: when you {when_}")
+    ctx.notify("Reminder set", f"{g.title}: when you {when_}", receipt=True)
     return Result("done", f"geofence reminder {g.title!r} ({g.proximity} {p.key}, list {out.get('list')!r})")
 
 
@@ -245,7 +245,7 @@ def h_reminder(r: Route, ctx: Context) -> Result:
     if w.start:
         args["dueDate"] = w.stamp()
     ctx.mcp_call("reminders_tasks", args)
-    ctx.notify("Reminder set" if w.start or not w.notes else "Reminder set, no time", shown)
+    ctx.notify("Reminder set" if w.start or not w.notes else "Reminder set, no time", shown, receipt=not w.notes)
     return Result("done", summary)
 
 
@@ -301,5 +301,5 @@ def h_calendar(r: Route, ctx: Context) -> Result:
     if w.all_day:
         args["isAllDay"] = True
     ctx.mcp_call("calendar_events", args)
-    ctx.notify("Event added", f"{shown} ({cal})")
+    ctx.notify("Event added", f"{shown} ({cal})", receipt=not w.notes)
     return Result("done", f"event {desc} on {cal!r}")

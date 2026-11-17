@@ -28,6 +28,7 @@ retention_days = 90         # activity, traces, saved answers and conversations 
 provider = "console"        # "console" (log only) or "pushcut"
 max_chars = 300             # longer answers get a "Full answer" button
 pushcut_notification = "Ring Router"   # name of the Pushcut notification to trigger
+receipts = true             # false: no notification for plain successes (sent, added, done); errors, taps, answers still notify
 
 [fm]
 path = "/usr/bin/fm"

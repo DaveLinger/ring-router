@@ -173,7 +173,7 @@ def h_claude_code(r: Route, ctx: Context) -> Result:
     if ctx.dry("claude_code"):
         ctx.notify("Dry run", f"Would ask Claude Code on {display}{' (follow-up)' if resume else ''}: “{r.body}”")
         return Result("dry_run", f"DRY RUN: would ask Claude Code on {display}: {r.body!r}")
-    ctx.notify(f"Claude Code on {display}", f"Looking into it: “{r.body}”")
+    ctx.notify(f"Claude Code on {display}", f"Looking into it: “{r.body}”", receipt=True)
     try:
         out = run_claude(ctx, host, r.body, resume=resume, changes=False)
     except subprocess.TimeoutExpired:
@@ -194,7 +194,7 @@ def run_proceed(payload: dict, ctx: Context) -> Result:
     if ctx.dry("claude_code"):
         ctx.notify("Dry run", f"Would let Claude Code on {display} apply: {payload['proposal']}")
         return Result("dry_run", f"DRY RUN: would apply on {host}: {payload['proposal']}")
-    ctx.notify(f"Claude Code on {display}", f"Going ahead: {payload['proposal']}")
+    ctx.notify(f"Claude Code on {display}", f"Going ahead: {payload['proposal']}", receipt=True)
     try:
         out = run_claude(ctx, host, f"Go ahead with the fix you proposed: {payload['proposal']}",
                          resume=payload["session"], changes=True)

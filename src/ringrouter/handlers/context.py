@@ -89,9 +89,14 @@ class Context:
         except Exception:  # tracing must never break a command
             log.debug("trace failed", exc_info=True)
 
-    def notify(self, title: str, text: str, buttons: list[Button] | None = None) -> None:
-        self.trace("notification", title=title, text=text, held=self.held is not None,
+    def notify(self, title: str, text: str, buttons: list[Button] | None = None, receipt: bool = False) -> None:
+        """Send a notification. `receipt` marks a plain "it worked" notice with nothing to act on or
+        check; [notify] receipts = false keeps those in the activity log only."""
+        quiet = receipt and not buttons and not self.cfg.section("notify").get("receipts", True)
+        self.trace("notification", title=title, text=text, held=self.held is not None, quiet=quiet,
                    buttons=[{"label": b.label, "url": b.url, "background": b.background} for b in buttons or []])
+        if quiet:
+            return
         if self.held is not None:
             self.held.append(Notice(title, text, buttons or []))
             return
