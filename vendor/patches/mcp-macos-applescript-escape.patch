@@ -1,0 +1,31 @@
+--- a/dist/tools/handlers/messagesHandlers.js
++++ b/dist/tools/handlers/messagesHandlers.js
+@@ -324,6 +324,17 @@
+         return formatListMarkdown('Chats', chats, formatChatMarkdown, 'No chats found.', { pagination: paginationMeta, includeTimezone: true });
+     }, 'read messages');
+ }
++/**
++ * Escapes a string for an AppleScript string literal. AppleScript knows only \\ \" \n \t \r;
++ * the JXA escaper's \' \` \$ are syntax errors there (any apostrophe broke sends).
++ */
++function sanitizeForAppleScript(input) {
++    return input
++        .replace(/\\/g, '\\\\')
++        .replace(/"/g, '\\"')
++        .replace(/\r\n?/g, '\n')
++        .replace(/\0/g, '');
++}
+ export async function handleCreateMessage(args) {
+     return handleAsyncOperation(async () => {
+         const validated = extractAndValidateArgs(args, CreateMessageSchema);
+@@ -340,8 +351,8 @@
+         const recipient = validated.to;
+         const appleScript = `tell application "Messages"
+     set targetService to 1st account whose service type = iMessage
+-    set targetBuddy to participant "${sanitizeForJxa(recipient)}" of targetService
+-    send "${sanitizeForJxa(validated.text)}" to targetBuddy
++    set targetBuddy to participant "${sanitizeForAppleScript(recipient)}" of targetService
++    send "${sanitizeForAppleScript(validated.text)}" to targetBuddy
+ end tell`;
+         await executeAppleScript(appleScript, 15000, 'Messages');
+         return `Successfully sent message to ${recipient}.`;
