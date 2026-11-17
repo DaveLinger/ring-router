@@ -1,0 +1,47 @@
+#!/bin/sh
+# ring-router-sudo: passwordless sudo for one user, only while a ring-router Proceed run is going.
+#
+#   ring-router-sudo on <id>    a Proceed run starts: grant (one grant per run id)
+#   ring-router-sudo off <id>   that run ended: drop its grant
+#   ring-router-sudo sweep      drop grants older than MAX_MIN minutes (a timer runs this)
+#   ring-router-sudo status
+#
+# The sudoers rule exists only while at least one grant is live, so two runs at once don't cut each
+# other off, and a run that dies without "off" still loses root after MAX_MIN minutes.
+# Installed root-owned by install.sh, which fills in @TARGET@.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+TARGET="@TARGET@"
+MAX_MIN=30
+RULE=/etc/sudoers.d/zz-ring-router-proceed
+if [ "$(uname)" = Darwin ]; then STATE=/var/db/ring-router-sudo; else STATE=/var/lib/ring-router-sudo; fi
+
+act=${1:-}; id=${2:-}
+case $act in
+  on|off) case $id in ''|*[!A-Za-z0-9_-]*) echo "bad id" >&2; exit 2 ;; esac ;;
+  sweep|status) ;;
+  *) echo "usage: ring-router-sudo on|off <id> | sweep | status" >&2; exit 2 ;;
+esac
+
+umask 077
+mkdir -p "$STATE"
+find "$STATE" -type f -mmin +"$MAX_MIN" -exec rm -f {} +
+if [ "$act" = on ]; then : > "$STATE/$id"; fi
+if [ "$act" = off ]; then rm -f "$STATE/$id"; fi
+
+if [ -n "$(ls -A "$STATE")" ]; then
+  if [ ! -f "$RULE" ]; then
+    tmp=$(mktemp)
+    printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$TARGET" > "$tmp"
+    if visudo -cqf "$tmp"; then
+      chmod 440 "$tmp"; chown root "$tmp"; mv "$tmp" "$RULE"
+      logger -t ring-router-sudo "passwordless sudo ON for $TARGET (run $id)"
+    else
+      rm -f "$tmp"; echo "visudo rejected the rule" >&2; exit 1
+    fi
+  fi
+elif [ -f "$RULE" ]; then
+  rm -f "$RULE"
+  logger -t ring-router-sudo "passwordless sudo OFF for $TARGET"
+fi
+if [ -f "$RULE" ]; then echo on; else echo off; fi

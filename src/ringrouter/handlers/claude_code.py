@@ -177,7 +177,9 @@ def h_claude_code(r: Route, ctx: Context) -> Result:
         return Result("dry_run", f"DRY RUN: would ask Claude Code on {display}: {r.body!r}")
     ctx.notify(f"Claude Code on {display}", f"Looking into it: “{r.body}”", receipt=True)
     try:
-        out = run_claude(ctx, host, r.body, resume=resume, changes=False)
+        hint = (" (Note from ring-router: if the owner says go ahead, that run will have passwordless sudo,"
+                " so a fix may include steps that need root.)") if h.get("proceed_sudo") else ""
+        out = run_claude(ctx, host, r.body + hint, resume=resume, changes=False)
     except subprocess.TimeoutExpired:
         ctx.notify(f"Claude Code on {display}", "No answer in time; it was only looking, nothing was changed.")
         return Result("failed", f"claude on {host}: timed out (read-only run)")
@@ -185,6 +187,37 @@ def h_claude_code(r: Route, ctx: Context) -> Result:
         ctx.notify(f"Claude Code on {display}", f"Not asked: {e}")
         return Result("failed", str(e))
     return _answer(ctx, host, r.body, out, title=f"Claude Code on {display}", proposal_ok=True)
+
+
+SWITCH = "/usr/local/sbin/ring-router-sudo"
+
+
+def proceed_sudo(ctx: Context, host: str, act: str, run_id: str) -> str | None:
+    """Turn the host's "sudo only during Proceed" switch on or off (helpers/proceed-sudo).
+    `[hosts.X] proceed_sudo` is "local" (this Mac) or "ssh:rr-sudo@host" (the switch account,
+    reached with [claude_code] sudo_identity). Returns None on success, else why it didn't work."""
+    cc, h = _settings(ctx, host)
+    how = str(h.get("proceed_sudo", "")).strip()
+    if not how:
+        return "not set up for this host"
+    if how == "local":
+        argv = ["/usr/bin/sudo", "-n", SWITCH, act, run_id]
+    elif how.startswith("ssh:"):
+        argv = ["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={int(cc.get('ssh_timeout_s', 15))}",
+                "-i", os.path.expanduser(cc.get("sudo_identity", "~/.ssh/ring-router-sudo_ed25519")),
+                "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", how[4:], f"{act} {run_id}"]
+    else:
+        return f"unknown proceed_sudo {how!r}"
+    try:
+        p = ctx.claude_runner(argv, None, 30)
+    except Exception as e:
+        return str(e)
+    got = (p.stdout or "").strip().splitlines()[-1:] or [""]
+    want = "on" if act == "on" else None
+    ctx.trace("proceed_sudo", host=host, act=act, result=got[0], exit=p.returncode)
+    if p.returncode != 0 or (want and got[0] != want):
+        return ((p.stderr or "").strip() or got[0] or f"exit {p.returncode}")[-200:]
+    return None
 
 
 def run_proceed(payload: dict, ctx: Context) -> Result:
@@ -197,8 +230,19 @@ def run_proceed(payload: dict, ctx: Context) -> Result:
         ctx.notify("Dry run", f"Would let Claude Code on {display} apply: {payload['proposal']}")
         return Result("dry_run", f"DRY RUN: would apply on {host}: {payload['proposal']}")
     ctx.notify(f"Claude Code on {display}", f"Going ahead: {payload['proposal']}", receipt=True)
+    run_id = (ctx.delivery_id or "run").replace(":", "-")[-40:]
+    granted = h.get("proceed_sudo") and proceed_sudo(ctx, host, "on", run_id)
+    if not h.get("proceed_sudo"):
+        sudo_note = ""
+    elif granted is None:
+        sudo_note = (" Passwordless sudo is switched on for this run only: use `sudo -n` for steps that need"
+                     " root.")
+    else:
+        sudo_note = (f" Passwordless sudo could not be switched on ({granted}); if a step needs root, stop"
+                     " and say exactly which command the owner should run.")
+        log.warning("proceed sudo on %s failed: %s", host, granted)
     try:
-        out = run_claude(ctx, host, f"Go ahead with the fix you proposed: {payload['proposal']}",
+        out = run_claude(ctx, host, f"Go ahead with the fix you proposed: {payload['proposal']}.{sudo_note}",
                          resume=payload["session"], changes=True)
     except subprocess.TimeoutExpired:
         ctx.notify(f"Claude Code on {display}", "No answer in time while making changes. Check the host before retrying.")
@@ -206,6 +250,13 @@ def run_proceed(payload: dict, ctx: Context) -> Result:
     except Exception as e:
         ctx.notify(f"Claude Code on {display}", f"Not done: {e}")
         return Result("failed", str(e))
+    finally:
+        if granted is None:
+            err = proceed_sudo(ctx, host, "off", run_id)
+            if err:   # the host's timer still drops it within 30 minutes
+                log.warning("proceed sudo off on %s failed: %s", host, err)
+                ctx.notify(f"Claude Code on {display}", f"Couldn't switch sudo back off ({err}); it expires on"
+                           " its own within 30 minutes.")
     return _answer(ctx, host, payload["proposal"], out, title=f"Claude Code on {display}: done", proposal_ok=False)
 
 

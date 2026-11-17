@@ -152,3 +152,69 @@ def test_claude_inside_a_container(ctx):
     import shlex
     remote = shlex.split(argv[-1])[2]                      # bash -lc '<this>'
     assert remote.endswith("&& sudo docker exec -i -w /root claude-code claude -p 'why is plex down'")
+
+
+# ------------------------------------------------ sudo only during Proceed --
+
+class SwitchFake(FakeClaude):
+    """FakeClaude that also answers the proceed-sudo switch (ssh rr-sudo@… "on <id>" / local sudo)."""
+    def __init__(self, switch_ok=True):
+        super().__init__()
+        self.switch, self.switch_ok = [], switch_ok
+
+    def __call__(self, argv, cwd, timeout_s):
+        last = argv[-1]
+        if "rr-sudo@" in " ".join(argv) or "/usr/local/sbin/ring-router-sudo" in argv:
+            act = last.split()[0] if " " in last else argv[-2]
+            self.switch.append(act)
+            if not self.switch_ok:
+                return subprocess.CompletedProcess(argv, 255, "", "Permission denied (publickey).")
+            return subprocess.CompletedProcess(argv, 0, "on\n" if act == "on" else "off\n", "")
+        return super().__call__(argv, cwd, timeout_s)
+
+
+def _propose_and_proceed(ctx, phrase):
+    ctx.claude_runner.replies = [
+        {"result": "Scanners hit 8080.\nPROPOSED FIX: drop CONNECT on 8080 with nftables", "session_id": "S1"},
+        {"result": "Done, rule added.", "session_id": "S1"}]
+    say(ctx, phrase)
+    note = ctx.notifier.sent[-1]
+    pid = note.buttons[0].url.split("/confirm/")[1].split("/")[0]
+    kind, payload = ctx.store.take_pending(pid)
+    return run_confirmed(kind, payload, ctx)
+
+
+def test_proceed_switches_sudo_on_for_the_run_then_off(ctx):
+    ctx.cfg.raw["hosts"]["racknerd"]["proceed_sudo"] = "ssh:rr-sudo@old.example"
+    ctx.claude_runner = SwitchFake()
+    res = _propose_and_proceed(ctx, "Ask Claude Code on RackNerd about the 500s")
+    assert res.state == "done"
+    assert ctx.claude_runner.switch == ["on", "off"]
+    first = args_of(ctx.claude_runner.calls[0])           # read-only run is told root comes on go-ahead
+    assert "passwordless sudo" in first[first.index("-p") + 1]
+    second = args_of(ctx.claude_runner.calls[1])
+    assert "use `sudo -n`" in second[second.index("-p") + 1]
+
+
+def test_switch_failure_still_runs_but_says_sudo_is_unavailable(ctx):
+    ctx.cfg.raw["hosts"]["racknerd"]["proceed_sudo"] = "ssh:rr-sudo@old.example"
+    ctx.claude_runner = SwitchFake(switch_ok=False)
+    res = _propose_and_proceed(ctx, "Ask Claude Code on RackNerd about the 500s")
+    assert res.state == "done" and ctx.claude_runner.switch == ["on"]      # never on, so no "off"
+    msg = args_of(ctx.claude_runner.calls[1])
+    assert "could not be switched on" in msg[msg.index("-p") + 1]
+
+
+def test_local_host_uses_sudo_n_on_the_switch(ctx):
+    ctx.cfg.raw["hosts"]["mac_mini"]["proceed_sudo"] = "local"
+    ctx.claude_runner = SwitchFake()
+    _propose_and_proceed(ctx, "Ask Claude Code on the Mac mini why calsync stopped")
+    assert ctx.claude_runner.switch == ["on", "off"]
+
+
+def test_host_without_proceed_sudo_never_touches_the_switch(ctx):
+    ctx.claude_runner = SwitchFake()
+    _propose_and_proceed(ctx, "Ask Claude Code on RackNerd about the 500s")
+    assert ctx.claude_runner.switch == []
+    msg = args_of(ctx.claude_runner.calls[0])
+    assert "passwordless sudo" not in msg[msg.index("-p") + 1]

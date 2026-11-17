@@ -128,6 +128,7 @@ notes_folder = "Research"
 [claude_code]
 claude = "claude"                    # the CLI on each host (it must be logged in there)
 ssh_identity = ""                    # a dedicated key, e.g. "~/.ssh/ring-router_ed25519" (no agent prompts)
+# sudo_identity = "~/.ssh/ring-router-sudo_ed25519"   # key for hosts with proceed_sudo = "ssh:rr-sudo@…"
 timeout_s = 900                      # one run's limit
 max_turns = 30
 followup_window_s = 900              # follow-ups resume the session; Proceed / "go ahead" valid this long
@@ -152,6 +153,7 @@ display = "RackNerd VPS"
 spoken = ["racknerd vps", "rack nerd vps", "racknerd", "rack nerd", "old vps", "the old vps", "vps 1", "vps one", "vps1"]
 ssh = "racknerd"
 workdir = "~"
+# proceed_sudo = "ssh:rr-sudo@racknerd"   # passwordless sudo only during a Proceed run (helpers/proceed-sudo); "local" on this Mac
 
 [hosts.contabo]
 display = "Contabo VPS"
