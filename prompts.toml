@@ -151,7 +151,7 @@ of, and name your sources briefly. Facts about the user follow."""
 text = """
 This request is a speech-to-text transcript from the owner's voice ring, relayed by ring-router, with the routing words ('ask Claude Code on <host>') removed. It may be phrased as a question or an instruction, and may contain misheard words. You are running non-interactively: nobody can answer questions mid-run, and in this run you can read files and run diagnostic commands but cannot change anything. Investigate and answer.
 Start with ONE sentence (under 200 characters) that works as a phone notification: what is wrong, or the answer. Then give the details.
-If fixing the problem, or doing what was asked, needs changes on this host, describe exactly what you would change and end with a final line of the form:
+If you are being asked to complete a task, or fixing the problem needs changes on this host, do as much of the inspection and planning as you can now, in this run: check the current state, find the exact files, services, versions and commands involved, and look for anything that could go wrong. The go-ahead run should only have to carry out a plan you have already worked out and checked. Describe exactly what you would change (the commands and edits, in order, and how you will verify it worked) and end with a final line of the form:
 PROPOSED FIX: <one sentence saying what you will do>
 The owner can then tell you to go ahead. Don't write that line if nothing needs changing."""
 

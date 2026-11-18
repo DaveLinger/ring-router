@@ -177,8 +177,8 @@ def h_claude_code(r: Route, ctx: Context) -> Result:
         return Result("dry_run", f"DRY RUN: would ask Claude Code on {display}: {r.body!r}")
     ctx.notify(f"Claude Code on {display}", f"Looking into it: “{r.body}”", receipt=True)
     try:
-        hint = (" (Note from ring-router: if the owner says go ahead, that run will have passwordless sudo,"
-                " so a fix may include steps that need root.)") if h.get("proceed_sudo") else ""
+        hint = (" (Note from ring-router: if the owner says go ahead, that run will have passwordless sudo"
+                " (`sudo -n`), so your proposed solution may use sudo.)") if h.get("proceed_sudo") else ""
         out = run_claude(ctx, host, r.body + hint, resume=resume, changes=False)
     except subprocess.TimeoutExpired:
         ctx.notify(f"Claude Code on {display}", "No answer in time; it was only looking, nothing was changed.")
