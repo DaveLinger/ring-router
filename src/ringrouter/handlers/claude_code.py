@@ -194,12 +194,15 @@ SWITCH = "/usr/local/sbin/ring-router-sudo"
 
 def proceed_sudo(ctx: Context, host: str, act: str, run_id: str) -> str | None:
     """Turn the host's "sudo only during Proceed" switch on or off (helpers/proceed-sudo).
-    `[hosts.X] proceed_sudo` is "local" (this Mac) or "ssh:rr-sudo@host" (the switch account,
-    reached with [claude_code] sudo_identity). Returns None on success, else why it didn't work."""
+    `[hosts.X] proceed_sudo` is "local" (this Mac), "ssh:rr-sudo@host" (the switch account,
+    reached with [claude_code] sudo_identity), or "always" (sudo is already passwordless there:
+    nothing to switch). Returns None on success, else why it didn't work."""
     cc, h = _settings(ctx, host)
     how = str(h.get("proceed_sudo", "")).strip()
     if not how:
         return "not set up for this host"
+    if how == "always":
+        return None
     if how == "local":
         argv = ["/usr/bin/sudo", "-n", SWITCH, act, run_id]
     elif how.startswith("ssh:"):
@@ -235,8 +238,7 @@ def run_proceed(payload: dict, ctx: Context) -> Result:
     if not h.get("proceed_sudo"):
         sudo_note = ""
     elif granted is None:
-        sudo_note = (" Passwordless sudo is switched on for this run only: use `sudo -n` for steps that need"
-                     " root.")
+        sudo_note = (" Passwordless sudo is available for this run: use `sudo -n` for steps that need root.")
     else:
         sudo_note = (f" Passwordless sudo could not be switched on ({granted}); if a step needs root, stop"
                      " and say exactly which command the owner should run.")
@@ -251,7 +253,7 @@ def run_proceed(payload: dict, ctx: Context) -> Result:
         ctx.notify(f"Claude Code on {display}", f"Not done: {e}")
         return Result("failed", str(e))
     finally:
-        if granted is None:
+        if granted is None and h.get("proceed_sudo") != "always":
             err = proceed_sudo(ctx, host, "off", run_id)
             if err:   # the host's timer still drops it within 30 minutes
                 log.warning("proceed sudo off on %s failed: %s", host, err)

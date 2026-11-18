@@ -153,7 +153,8 @@ display = "RackNerd VPS"
 spoken = ["racknerd vps", "rack nerd vps", "racknerd", "rack nerd", "old vps", "the old vps", "vps 1", "vps one", "vps1"]
 ssh = "racknerd"
 workdir = "~"
-# proceed_sudo = "ssh:rr-sudo@racknerd"   # passwordless sudo only during a Proceed run (helpers/proceed-sudo); "local" on this Mac
+# proceed_sudo = "ssh:rr-sudo@racknerd"   # passwordless sudo only during a Proceed run (helpers/proceed-sudo); "local" on this Mac;
+#                                         # "always" if sudo is already passwordless there (just tells Claude Code)
 
 [hosts.contabo]
 display = "Contabo VPS"

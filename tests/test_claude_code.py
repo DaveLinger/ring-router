@@ -218,3 +218,13 @@ def test_host_without_proceed_sudo_never_touches_the_switch(ctx):
     assert ctx.claude_runner.switch == []
     msg = args_of(ctx.claude_runner.calls[0])
     assert "passwordless sudo" not in msg[msg.index("-p") + 1]
+
+
+def test_always_sends_the_sudo_notes_without_a_switch(ctx):
+    ctx.cfg.raw["hosts"]["truenas"]["proceed_sudo"] = "always"
+    ctx.claude_runner = SwitchFake()
+    res = _propose_and_proceed(ctx, "Ask Claude on the NAS why Plex is down")
+    assert res.state == "done" and ctx.claude_runner.switch == []
+    first, second = (args_of(c) for c in ctx.claude_runner.calls)
+    assert "may use sudo" in first[first.index("-p") + 1]
+    assert "use `sudo -n`" in second[second.index("-p") + 1]
