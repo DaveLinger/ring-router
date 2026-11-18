@@ -1,0 +1,8 @@
+#!/bin/sh
+# Run a command on the TrueNAS host as claude-ro (no sudo except the rr-ro wrapper). Everything after
+# the script name is the remote command; ssh options can't be passed, so the read-only run can't
+# switch user or key. Claude Code's read-only allowlist permits this script, not ssh itself.
+# Lives in the Claude Code container at /home/developer/.claude/bin/truenas-ro (a persistent mount).
+exec /usr/bin/ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none \
+  -o ConnectTimeout=10 -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+  -i "$HOME/.ssh/truenas_ro_ed25519" -l claude-ro 10.0.1.2 -- "$@"

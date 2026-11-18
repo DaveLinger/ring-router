@@ -155,6 +155,8 @@ ssh = "racknerd"
 workdir = "~"
 # proceed_sudo = "ssh:rr-sudo@racknerd"   # passwordless sudo only during a Proceed run (helpers/proceed-sudo); "local" on this Mac;
 #                                         # "always" if sudo is already passwordless there (just tells Claude Code)
+# extra_read_tools = ["Bash(/path/to/read-only-launcher:*)"]   # added to the read-only allowlist for this host
+# read_hint = "How to inspect this host read-only..."           # appended to the read-only run's request
 
 [hosts.contabo]
 display = "Contabo VPS"

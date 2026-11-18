@@ -1,0 +1,137 @@
+#!/bin/bash
+# rr-ro: read-only root commands for Claude Code's first (look-only) run on TrueNAS.
+# The claude-ro account may run this, and only this, with `sudo -n`. Anything not on the list below
+# is refused, so text in a log or a misheard request can't change the system through it.
+#
+#   sudo -n rr-ro docker ps|logs|inspect|stats --no-stream|images|top ...
+#   sudo -n rr-ro docker compose ls|ps|logs ...   (also: compose -p NAME ps|logs ...)
+#   sudo -n rr-ro zpool status|list|iostat|get|history ...
+#   sudo -n rr-ro zfs list|get ...
+#   sudo -n rr-ro midclt call <read method> [args]   (*.query *.config *.get_instance *.status *.get_* system.info)
+#   sudo -n rr-ro journalctl ... | dmesg ... | smartctl -a|-H|-x|-i|-A|-c|--scan ... | systemctl status ...
+#   sudo -n rr-ro ss ... | ps ...
+#   sudo -n rr-ro cat|head|tail|ls|grep ...       (files under /var/log and /mnt/.ix-apps/app_configs only)
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin SYSTEMD_PAGER=cat PAGER=cat LC_ALL=C.UTF-8
+READ_ROOTS=(/var/log /mnt/.ix-apps/app_configs)
+
+no() { echo "rr-ro: refused: $*" >&2; exit 126; }
+[ $# -ge 1 ] || no "no command (see the comment at the top of $0)"
+cmd=$1; shift
+
+has() { local x a; x=$1; shift; for a in "$@"; do [ "$a" = "$x" ] && return 0; done; return 1; }
+# refuse if any argument starts with one of the given prefixes
+forbid() { local a p; for a in "${ARGS[@]}"; do for p in "$@"; do [[ $a == "$p"* ]] && no "$cmd option $a"; done; done; return 0; }
+# refuse bundled short options containing any of these letters ("-tlnK" hides -K)
+forbid_letters() { local a; for a in "${ARGS[@]}"; do [[ $a =~ ^-[A-Za-z]+$ && $a =~ [$1] ]] && no "$cmd option $a"; done; return 0; }
+under_roots() {   # every path argument must resolve inside READ_ROOTS
+  local p r ok
+  for p in "$@"; do
+    r=$(realpath -e -- "$p" 2>/dev/null) || no "no such path: $p"
+    ok=
+    for root in "${READ_ROOTS[@]}"; do [[ $r == "$root" || $r == "$root"/* ]] && ok=1; done
+    [ -n "$ok" ] || no "path outside ${READ_ROOTS[*]}: $p"
+  done
+}
+ARGS=("$@")
+
+case $cmd in
+docker)
+  sub=${1:-}
+  case $sub in
+    ps|logs|inspect|images|top) exec /usr/bin/docker "$@" ;;
+    stats) has --no-stream "$@" || no "docker stats needs --no-stream"; exec /usr/bin/docker "$@" ;;
+    compose)
+      rest=("${@:2}")
+      if [ "${rest[0]:-}" = -p ] && [ ${#rest[@]} -ge 3 ]; then verb=${rest[2]}; else verb=${rest[0]:-}; fi
+      has "$verb" ls ps logs || no "docker compose $verb"
+      exec /usr/bin/docker "$@" ;;
+    *) no "docker $sub" ;;
+  esac ;;
+zpool)
+  has "${1:-}" status list iostat get history || no "zpool ${1:-}"
+  exec /usr/sbin/zpool "$@" ;;
+zfs)
+  has "${1:-}" list get || no "zfs ${1:-}"
+  exec /usr/sbin/zfs "$@" ;;
+midclt)
+  [ "${1:-}" = call ] && [ $# -ge 2 ] || no "midclt: only 'call <read method>'"
+  m=$2
+  [[ $m == system.info || $m =~ ^[a-z0-9_]+(\.[a-z0-9_]+)*\.(query|config|get_instance|status|get_[a-z0-9_]+)$ ]] \
+    || no "midclt method $m (read methods only)"
+  exec /usr/bin/midclt call "${@:2}" ;;
+journalctl)
+  forbid --vacuum --rotate --flush --sync --relinquish --smart-relinquish --setup-keys --update-catalog \
+         --cursor-file --file= -D --directory --root --image
+  forbid_letters D
+  exec /usr/bin/journalctl --no-pager "$@" ;;
+dmesg)
+  forbid -c -C --clear --read-clear -n --console -D -E -F --file
+  forbid_letters cCnDEF
+  exec /usr/bin/dmesg "$@" ;;
+smartctl)
+  i=0
+  while [ $i -lt $# ]; do
+    a=${ARGS[$i]}
+    case $a in
+      -a|-H|-x|-i|-A|-c|--scan|--scan-open|-j|--json|--all|--health|--xall|--info|--attributes|--capabilities) ;;
+      -d) i=$((i+1)) ;;
+      /dev/*) ;;
+      *) no "smartctl option $a" ;;
+    esac
+    i=$((i+1))
+  done
+  exec /usr/sbin/smartctl "$@" ;;
+systemctl)
+  has "${1:-}" status is-active is-failed is-enabled list-units list-timers list-unit-files show cat \
+    || no "systemctl ${1:-}"
+  exec /usr/bin/systemctl --no-pager "$@" ;;
+ss)
+  forbid -K --kill -D --diag -F --filter
+  forbid_letters KDF
+  exec /usr/bin/ss "$@" ;;
+ps)
+  exec /usr/bin/ps "$@" ;;
+cat|ls)
+  paths=(); for a in "$@"; do [[ $a == -* ]] || paths+=("$a"); done
+  [ ${#paths[@]} -ge 1 ] || no "$cmd needs a path under ${READ_ROOTS[*]}"
+  under_roots "${paths[@]}"
+  if [ "$cmd" = ls ]; then
+    for a in "$@"; do [[ $a == -* ]] && [[ ! $a =~ ^-[lahtrRS1d]+$ ]] && no "ls option $a"; done
+    exec /usr/bin/ls "$@"
+  fi
+  for a in "$@"; do [[ $a == -* ]] && no "cat option $a"; done
+  exec /usr/bin/cat -- "$@" ;;
+head|tail)
+  paths=(); i=0
+  while [ $i -lt $# ]; do
+    a=${ARGS[$i]}
+    case $a in
+      -n|-c) i=$((i+1)); [[ ${ARGS[$i]:-} =~ ^[+-]?[0-9]+$ ]] || no "$cmd $a needs a number" ;;
+      -n[0-9]*|-c[0-9]*|-[0-9]*|-F|-f|-q) ;;
+      -*) no "$cmd option $a" ;;
+      *) paths+=("$a") ;;
+    esac
+    i=$((i+1))
+  done
+  [ ${#paths[@]} -ge 1 ] || no "$cmd needs a path under ${READ_ROOTS[*]}"
+  under_roots "${paths[@]}"
+  exec "/usr/bin/$cmd" "$@" ;;
+grep)
+  opts=(); rest=(); i=0
+  while [ $i -lt $# ]; do
+    a=${ARGS[$i]}
+    case $a in
+      -A|-B|-C|-m|-e) opts+=("$a"); i=$((i+1)); opts+=("${ARGS[$i]:-}") ;;
+      -*) [[ $a =~ ^-[inclEFvrhHwsoaIRz]+$ ]] || no "grep option $a"; opts+=("$a") ;;
+      *) rest+=("$a") ;;
+    esac
+    i=$((i+1))
+  done
+  if has -e "${opts[@]+"${opts[@]}"}"; then paths=("${rest[@]+"${rest[@]}"}"); else paths=("${rest[@]:1}"); fi
+  [ ${#paths[@]} -ge 1 ] || no "grep needs a path under ${READ_ROOTS[*]}"
+  under_roots "${paths[@]}"
+  exec /usr/bin/grep "$@" ;;
+*)
+  no "$cmd (see the comment at the top of $0 for what's allowed)" ;;
+esac

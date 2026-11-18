@@ -228,3 +228,13 @@ def test_always_sends_the_sudo_notes_without_a_switch(ctx):
     first, second = (args_of(c) for c in ctx.claude_runner.calls)
     assert "may use sudo" in first[first.index("-p") + 1]
     assert "use `sudo -n`" in second[second.index("-p") + 1]
+
+
+def test_extra_read_tools_and_read_hint_reach_the_read_run(ctx):
+    ctx.cfg.raw["hosts"]["truenas"].update(extra_read_tools=["Bash(ssh truenas-ro:*)"],
+                                           read_hint="Use `ssh truenas-ro` for host checks.")
+    say(ctx, "Ask Claude on the NAS why Plex is down")
+    a = args_of(ctx.claude_runner.calls[0])
+    tools = a[a.index("--allowedTools") + 1:a.index("--disallowedTools")]
+    assert "Bash(ssh truenas-ro:*)" in tools and "Bash(cat:*)" in tools and "Bash" not in tools
+    assert "Use `ssh truenas-ro` for host checks." in a[a.index("-p") + 1]

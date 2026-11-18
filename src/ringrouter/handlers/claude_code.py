@@ -89,8 +89,8 @@ def run_claude(ctx: Context, host: str, message: str, *, resume: str | None, cha
     if changes:
         args += ["--permission-mode", "acceptEdits", "--allowedTools", *h.get("change_tools", CHANGE_TOOLS)]
     else:
-        args += ["--permission-mode", "default", "--allowedTools", *h.get("read_tools", cc.get("read_tools", READ_TOOLS)),
-                 "--disallowedTools", *NEVER_WHEN_READING]
+        tools = [*h.get("read_tools", cc.get("read_tools", READ_TOOLS)), *h.get("extra_read_tools", [])]
+        args += ["--permission-mode", "default", "--allowedTools", *tools, "--disallowedTools", *NEVER_WHEN_READING]
     if h.get("model", cc.get("model")):
         args += ["--model", h.get("model", cc.get("model"))]
     if resume:
@@ -179,6 +179,8 @@ def h_claude_code(r: Route, ctx: Context) -> Result:
     try:
         hint = (" (Note from ring-router: if the owner says go ahead, that run will have passwordless sudo"
                 " (`sudo -n`), so your proposed solution may use sudo.)") if h.get("proceed_sudo") else ""
+        if h.get("read_hint"):          # e.g. how to reach a read-only account on the host
+            hint += f" ({h['read_hint'].strip()})"
         out = run_claude(ctx, host, r.body + hint, resume=resume, changes=False)
     except subprocess.TimeoutExpired:
         ctx.notify(f"Claude Code on {display}", "No answer in time; it was only looking, nothing was changed.")
