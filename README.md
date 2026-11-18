@@ -189,7 +189,8 @@ In practice:
 | *"Move my dentist appointment to next week"* | 🧠 The agent finds it and moves it |
 | *"What's the best Chinese restaurant in Charleston?"* → *"Which of those is cheapest?"* | 🧠 Web search; follow-ups keep the thread |
 | *"Okay Mark, thanks, see you later… ask DeepSeek what color is the sky"* | 🧹 The agent spots the buried command and hands it back, word for word |
-| *"Ask Claude Code on the RackNerd VPS why the websites are down"* · *"Ask Claude on the home server why Plex is down"* | 🛠️ Claude Code on that host looks into it (read-only) and answers; naming a host is what makes "Claude" mean Claude Code |
+| *"Ask Claude Code on the RackNerd VPS why the websites are down"* · *"Ask Claude on the home server why Plex is down"* | 🛠️ Claude Code on that host looks into it (read-only) and answers; naming a host is what makes "Claude" mean Claude Code. A misheard host ("on Rachnard") still matches when it sounds and is spelled like exactly one host |
+| *"Ask Claude Code on the TrueNAS to restart the Plex container"* | 🛠️ A task: the read-only run inspects and plans it (on TrueNAS through a read-only account, [helpers/truenas-ro](helpers/truenas-ro/README.md)), then proposes the exact steps with a **Proceed** button |
 | *→ "Go ahead"* (or the **Proceed** button, or **Make this change** on the full-answer page) | 🛠️ If it proposed a fix, the same session makes the change and reports back, with passwordless sudo for that run only on hosts set up for it ([helpers/proceed-sudo](helpers/proceed-sudo/README.md)). Nothing waiting → refused |
 | *→ "Ask Claude on the home server what changed last night"* | 🛠️ Follow-ups within 15 minutes continue the same Claude Code session |
 | *"Set a timer for 10 minutes"* | 🚫 Refused: timers and alarms aren't supported |
@@ -212,8 +213,10 @@ In practice:
   Otherwise: one **Send** button per candidate (up to 3), or refused if no card matches. It goes to
   the number or address of the conversation you last wrote in. "Ask Google what…" with no Google in
   Contacts goes to the agent. `live_recipients` keeps Contacts matches in dry run unless it lists `"contacts"`.
-- **Near misses ask.** A name spelled *and* sounding like one of yours ("Sherry", "Jerry" for Terri)
-  gets a **Send / Cancel** tap. "Troy", "Terri's mom" and "the guy at the door" are refused.
+- **Near misses follow the same 7-day rule.** A name spelled *and* sounding like one of yours
+  ("Sherry", "Jerry" for Terri) sends when exactly one of the people it could mean was messaged in
+  the last 7 days, to that person; several recent → one **Send** button each; nobody recent → a
+  **Send / Cancel** tap. "Troy", "Terri's mom" and "the guy at the door" are refused.
 - **No guessing at numbers.** The number is the `handle` in your config, or the one Contacts card
   with that exact name. No card, or two, and nothing is sent.
 - **"Tell" is verbatim.** Only "ask X…" is rewritten, and the receipt shows the exact text sent.
@@ -355,6 +358,23 @@ in to your tailnet. On macOS the CLI is `/Applications/Tailscale.app/Contents/Ma
 public), remove that mount with `tailscale funnel --https=443 --set-path / off`. Don't use
 `tailscale funnel reset` if other ports on the machine are funnelled: it clears them all.
 
+### Connect the Pebble app
+
+In the Pebble app, set up a webhook for each gesture you use (single click & hold, double click &
+hold); the router accepts both.
+
+| Field | Value |
+| --- | --- |
+| Webhook URL | `https://<your-mac>.ts.net/hook/<RING_ROUTER_PATH_TOKEN>` (from `.env`) |
+| What to send | **Transcription**. Recording-only deliveries have no text and are discarded (logged as such) |
+| Headers | none (remove an empty row, or Save may stay disabled) |
+| Sign requests | **on**, with `RING_ROUTER_SIGNING_SECRET` from `.env` |
+
+**Send test event** should answer **200** (`test ok`); test events never run anything. The app signs
+with exactly what is in the secret field, including a line break pasted along with it, so the router
+accepts the secret with or without a trailing newline. A 401 means the secret doesn't match; a 404,
+the path token. Every rejected or discarded delivery is logged in `~/Library/Logs/ring-router.log`.
+
 <details>
 <summary><b>Why "Ring Router.app", and granting macOS permissions</b></summary>
 
@@ -459,7 +479,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Piece | State |
 | --- | --- |
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, old-recording gate | ✅ Live, checked against real ring traffic (2026-11-17) |
-| Router: cancels, scenes, fixed commands, recipient tiers, refusals | ✅ Done; 117 phrases in the answer key |
+| Router: cancels, scenes, fixed commands, recipient tiers, refusals | ✅ Done; 147 phrases in the answer key |
 | On-device model: "ask" rewrites, note titles, item splits, reminder and event titles | ✅ Done (real model) |
 | Dates and times in code (`when.py`), the model as flagged fallback | ✅ Done; 21 of 21 live cases right |
 | iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live end to end from the real ring |
@@ -478,6 +498,11 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Lock and door read-back (`[home] read_back`) | ✅ Live: "Laundry Room Door locked (confirmed)" / "unlocked (confirmed)" end to end (still off by default) |
 | HomeKit fan speeds, device and room nicknames | ✅ Live: low / medium / high verified on all four ceiling fans; "set the guest bedroom fan to high" etc. run end to end |
 | Claude Code per host (Mac mini, TrueNAS, RackNerd VPS, Contabo VPS) | ✅ Live on all four hosts, including Proceed and "go ahead" |
+| Proceed with sudo for that run only (`proceed_sudo`, [helpers/proceed-sudo](helpers/proceed-sudo/README.md)) | ✅ Installed on RackNerd, Contabo and the Mac mini: switch on gives `sudo -n`, off needs a password again, 30-minute expiry; TrueNAS uses `"always"` |
+| TrueNAS read-only host access for the first run ([helpers/truenas-ro](helpers/truenas-ro/README.md)) | ✅ Live: a real read run reported pool health and 17 containers; writes, reboot, `/etc/shadow` and plain sudo refused |
+| **Make this change** on the full-answer page | ✅ Done (tests through the HTTP server) |
+| Configured names under the 7-day rule; misheard Claude Code hosts | ✅ Done; checked against the real Contacts and Messages history |
+| `[notify] receipts = false`: notifications only for errors, questions, answers and warnings | ✅ Live |
 | "Ask Claude" through Claude Code on the subscription (`[models.claude] backend = "claude_code"`) | ✅ Live: an answer and a follow-up in the same session, about $0.01 of plan usage each; falls back to OpenRouter on any failure (tested with fakes) |
 
 See the **[build plan](docs/PLAN.md)** for the design, the reasoning behind each decision, and the
@@ -523,6 +548,8 @@ ring-router/
 │   └── cli.py         # the ring-router command
 ├── app/               # Ring Router.app launcher (Swift) + Info.plist + build.sh
 ├── helpers/georeminder/  # Swift: geocode + EventKit location reminder
+├── helpers/proceed-sudo/ # passwordless sudo only during a Claude Code Proceed run
+├── helpers/truenas-ro/   # read-only host access for Claude Code's first run on TrueNAS
 ├── launchd/           # listener, watchdog, self-test and permission-check jobs
 ├── vendor/            # pinned mcp-macos + HomeMCPBridge build script and patches
 ├── tests/             # the answer key and the test suite

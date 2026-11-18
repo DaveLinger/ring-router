@@ -222,8 +222,9 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
 | **Research** | "Research the best robot vacuum under $500" / "Research with DeepSeek…" | A note in the "Research" folder; Pushcut just says it's ready |
 
 - **Claude Code** (`handlers/claude_code.py`): hosts and spoken names are in `[hosts]` (Mac mini, TrueNAS,
-  RackNerd VPS, Contabo VPS); an unknown host after "Claude Code on" is refused; the default is the Mac
-  mini. "Ask Claude on <known host>" is Claude Code too (a host makes the intent clear); "ask Claude …"
+  RackNerd VPS, Contabo VPS); an unknown host after "Claude Code on" is refused unless the next word or
+  two sound like (same Soundex) and are spelled like (similarity ≥ 0.7) exactly one host ("Rachnard" →
+  RackNerd; safe because the first run only looks); the default is the Mac mini. "Ask Claude on <known host>" is Claude Code too (a host makes the intent clear); "ask Claude …"
   without one stays the OpenRouter model. Each request runs `claude -p --output-format json` locally or
   over SSH (`bash -lc`, ring-router's own key with `IdentityAgent=none` so a background run never waits on
   1Password). Remote Control sessions on those hosts were considered and rejected: they're interactive
@@ -231,13 +232,25 @@ Date extraction always includes today's date and time zone. The macos-mcp mail t
   middle of the owner's own conversations.
   1. **Investigate, read-only:** `--permission-mode default` with a diagnostic allowlist (`READ_TOOLS`:
      Read/Grep/Glob, `systemctl status`, `journalctl`, `docker ps/logs`, `curl -I`…) and Edit/Write
-     disallowed; unlisted tools are refused because nobody can be asked mid-run. The notification is
-     the first sentence plus **Full answer** (the answer page).
+     disallowed; unlisted tools are refused because nobody can be asked mid-run. For a task, the prompt
+     asks it to do the inspection and planning now so the go-ahead only executes a checked plan. The
+     notification is the first sentence plus **Full answer** (the answer page). Per host,
+     `extra_read_tools` widens the allowlist and `read_hint` tells it how: on TrueNAS, where nearly
+     every check needs root, it reaches the host as `claude-ro` through a launcher whose arguments are
+     only the remote command, plus `rr-ro`, a root-owned wrapper of read-only root commands
+     (helpers/truenas-ro). Plain `ssh` is never allowed in this run: `-l claude -i …` would switch to
+     the full-sudo account.
   2. If changes are needed the answer ends `PROPOSED FIX: …`: the notification adds **Proceed**, and a
      spoken "go ahead" / "do it" / "fix it" (the whole command) does the same, only while exactly that
-     one proposal is waiting (`[claude_code] followup_window_s`, 15 min).
+     one proposal is waiting (`[claude_code] followup_window_s`, 15 min). The answer page shows the
+     proposal with **Make this change / Cancel** (POST to the same one-time `/confirm`), while it waits.
   3. **Proceed** resumes the same session (`--resume`) with `acceptEdits` and the host's `change_tools`;
      a timeout there is `unknown`, never retried. `allow_changes = false` on a host means no Proceed.
+     With `proceed_sudo` the run has passwordless sudo for its duration only (helpers/proceed-sudo):
+     a switch adds a NOPASSWD rule while any run's grant is live and a timer drops grants after 30
+     minutes. On Linux the switch is behind an `rr-sudo` account whose only key, on the Mac mini, is
+     pinned to it, so the host user can't flip it and root login stays off; on the Mac ring-router runs
+     as the user, so it only limits mistakes and time. `"always"` (TrueNAS) just tells Claude Code.
   Follow-ups to the same host within the window resume the session (read-only again).
   A host that can't be reached yet has `not_ready = "why"` and answers "isn't set up yet".
 - **Shopping list:** on-device structured output splits items, so "mac and cheese" stays one item.
