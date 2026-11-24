@@ -479,7 +479,7 @@ Flags: `--test-event`, `--replay` (dedupe), `--bad-signature`, `--audio`, `--tri
 | Piece | State |
 | --- | --- |
 | Webhook checks: secret path, HMAC v1, ±5 min, dedupe, old-recording gate | ✅ Live, checked against real ring traffic (2026-11-17) |
-| Router: cancels, scenes, fixed commands, recipient tiers, refusals | ✅ Done; 147 phrases in the answer key |
+| Router: cancels, scenes, fixed commands, recipient tiers, refusals | ✅ Done; 151 phrases in the answer key |
 | On-device model: "ask" rewrites, note titles, item splits, reminder and event titles | ✅ Done (real model) |
 | Dates and times in code (`when.py`), the model as flagged fallback | ✅ Done; 21 of 21 live cases right |
 | iMessage / Notes / Reminders / Calendar / Contacts via mcp-macos | ✅ Live end to end from the real ring |

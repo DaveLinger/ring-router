@@ -831,3 +831,29 @@ route = "agent"                  # "hey <unknown>" is just talk, as before
 say = "Tell the plumber I'll be home at noon"
 route = "refuse"                 # "the ..." is never a Contacts lookup
 rule = "unknown_recipient"
+
+# A command verb misheard in another tense at the start, retried only when nothing else matched
+[[case]]
+say = "Asked instinct, how long until the P club drops?"
+route = "imessage"
+recipient = "instinct"
+tier = "strong"
+rewrite = "ask_question"
+
+[[case]]
+say = "Told Terri I'm on my way."
+sends = "I'm on my way."
+route = "imessage"
+recipient = "terri"
+tier = "strong"
+rewrite = "none"
+
+[[case]]
+say = "Asked Claude Code on the NAS why Plex is down"
+route = "claude_code"
+host = "truenas"
+extracted = "why Plex is down"
+
+[[case]]
+say = "Asked about the weather in Paris"   # no command after the fix either: still the agent
+route = "agent"

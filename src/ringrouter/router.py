@@ -38,6 +38,17 @@ class Route:
         return f"[{self.route}] {self.reason} {extra} body={self.body!r}".strip()
 
 
+LEADING_VERB = re.compile(r"^(asked|asks|told|tells)\b", re.IGNORECASE)
+
+
+def fix_leading_verb(t: str) -> str:
+    """'Asked/Asks' -> 'Ask', 'Told/Tells' -> 'Tell', at the very start only (keeping capitalisation)."""
+    def sub(m: re.Match) -> str:
+        w = "ask" if m.group(1).lower().startswith("ask") else "tell"
+        return w.capitalize() if m.group(1)[0].isupper() else w
+    return LEADING_VERB.sub(sub, t, count=1)
+
+
 def route(transcript: str, cfg) -> Route:
     raw = cfg.raw
     t = clean(transcript)
@@ -61,11 +72,16 @@ def route(transcript: str, cfg) -> Route:
             return Route("scene", t, params={"scene": key}, reason="exact scene phrase")
 
     # 3. prefix routes ---------------------------------------------------------
-    for fn in (_go_ahead, _claude_code, _research, _ask_model, _note, _remember, _shopping, _reminder,
-               _calendar, _home, _message, _home_suffix):
-        r = fn(t, raw)
-        if r:
-            return r
+    # A command verb misheard in another tense ("Asked Instinct how long...", "Told Terri...") is
+    # retried as the command, but only when the words as heard match no command at all.
+    for text in dict.fromkeys([t, fix_leading_verb(t)]):
+        for fn in (_go_ahead, _claude_code, _research, _ask_model, _note, _remember, _shopping, _reminder,
+                   _calendar, _home, _message, _home_suffix):
+            r = fn(text, raw)
+            if r:
+                if text != t:
+                    r.reason += f" (heard {t.split()[0]!r} as {text.split()[0]!r})"
+                return r
 
     # 4. refusals ---------------------------------------------------------------
     low = t.lower()
